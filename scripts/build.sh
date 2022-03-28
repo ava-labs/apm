@@ -30,7 +30,7 @@ fi
 
 # Build apm, which is run as a subprocess
 echo "Building $name in $binary_directory/$name"
-go build -o "$binary_directory/$name" ./apm
+go build -o "$binary_directory/$name" ./main
 
 mkdir -p ./build
-go build -o ./build/apm ./apm
+go build -o ./build/apm ./main
