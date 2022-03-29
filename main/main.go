@@ -3,72 +3,45 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/ava-labs/apm/service"
 )
 
 func main() {
+
+	api := service.New()
+	var err error
+
 	if len(os.Args) < 2 {
-		fmt.Println("I need a subcommand")
+		fmt.Println("missing subcommand")
 		os.Exit(1)
 	}
 
 	switch os.Args[1] {
 	case "install":
-		if len(os.Args) != 3 {
-			fmt.Println("Invalid number of parameters for install")
-			os.Exit(1)
-		}
-		fmt.Println("Not implemented yet")
+		err = api.Install(os.Args[2])
 	case "uninstall":
-		if len(os.Args) != 3 {
-			fmt.Println("Invalid number of parameters for uninstall")
-			os.Exit(1)
-		}
-		fmt.Println("Not implemented yet")
+		err = api.Uninstall(os.Args[2])
 	case "search":
-		if len(os.Args) != 3 {
-			fmt.Println("Invalid number of parameters for search")
-			os.Exit(1)
-		}
-		fmt.Println("Not implemented yet")
+		err = api.Search(os.Args[2])
 	case "info":
-		if len(os.Args) != 3 {
-			fmt.Println("Invalid number of parameters for info")
-			os.Exit(1)
-		}
-		fmt.Println("Not implemented yet")
-
+		err = api.Info(os.Args[2])
 	case "sync":
-		if len(os.Args) != 2 {
-			fmt.Println("Invalid number of parameters for sync")
-			os.Exit(1)
-		}
-		fmt.Println("Not implemented yet")
+		err = api.Sync(os.Args[2])
 	case "update":
-		if len(os.Args) < 2 {
-			fmt.Println("Invalid number of parameters for update")
-			os.Exit(1)
-		}
-		fmt.Println("Not implemented yet")
+		err = api.Update(os.Args[2])
 	case "add-repository":
-		if len(os.Args) != 3 {
-			fmt.Println("Invalid number of parameters for add-repository")
-			os.Exit(1)
-		}
-		fmt.Println("Not implemented yet")
+		err = api.AddRepository(os.Args[2])
 	case "remove-repository":
-		if len(os.Args) != 3 {
-			fmt.Println("Invalid number of parameters for remove-repository")
-			os.Exit(1)
-		}
-		fmt.Println("Not implemented yet")
+		err = api.RemoveRepository(os.Args[2])
 	case "list-repositories":
-		if len(os.Args) != 3 {
-			fmt.Println("Invalid number of parameters for list-repositories")
-			os.Exit(1)
-		}
-		fmt.Println("Not implemented yet")
+		err = api.ListRepositories()
 	default:
 		fmt.Println("invalid command")
-		os.Exit(1)
+		os.Exit(2)
+	}
+
+	if err != nil {
+		os.Exit(3)
 	}
 }
