@@ -1,4 +1,4 @@
-module apm
+module github.com/ava-labs/apm
 
 go 1.18
 
