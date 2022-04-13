@@ -13,11 +13,10 @@ import (
 
 var (
 	homeDir    = os.ExpandEnv("$HOME")
-	workingDir = filepath.Join(homeDir, ".", constant.AppName)
+	workingDir = filepath.Join(homeDir, fmt.Sprintf(".%s", constant.AppName))
 )
 
 func main() {
-
 	var err error
 
 	_, err = service.New(
@@ -28,7 +27,7 @@ func main() {
 	)
 
 	//switch os.Args[1] {
-	//case "install":
+	//case "install"
 	//	err = api.Install(os.Args[2])
 	//case "uninstall":
 	//	err = api.Uninstall(os.Args[2])

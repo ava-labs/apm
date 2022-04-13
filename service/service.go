@@ -3,10 +3,11 @@ package service
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/ava-labs/avalanchego/codec"
-	"github.com/ava-labs/avalanchego/codec/linearcodec"
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/leveldb"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
@@ -14,33 +15,43 @@ import (
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/ava-labs/avalanchego/utils/subprocess"
-	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/hashicorp/go-plugin"
 
+	"github.com/ava-labs/avalanche-plugin/constant"
+	"github.com/ava-labs/avalanche-plugin/grpc"
 	avaxPlugin "github.com/ava-labs/avalanche-plugin/plugin"
 	"github.com/ava-labs/avalanche-plugins-core/core"
 )
 
 var (
-	dbPath           = "db"
-	repositoriesPath = "repositories"
+	dbDir           = "db"
+	repositoriesDir = "repositories"
+	buildDir        = "build"
 
-	repoPrefix      = []byte("repo")
-	bootstrapPrefix = []byte("bootstrap")
-
-	bootstrappedKey = []byte("bootstrapped")
+	repoPrefix   = []byte("repo")
+	syncedPrefix = []byte("synced")
 
 	codecVersion uint16 = 1
+
+	auth = &http.BasicAuth{
+		Username: "personal access token",
+		//TODO accept token through cli
+		Password: "<YOUR PERSONAL ACCESS TOKEN HERE>",
+	}
 )
 
 type Service struct {
 	repositoriesPath string
+	buildPath        string
 
-	codecManager   codec.Manager
-	db             database.Database
+	codecManager codec.Manager
+	db           database.Database
+	//TODO merge these databases together
 	repositoriesDB database.Database
-	bootstrapDB    database.Database
+	syncedDB       database.Database
 	fsReader       filesystem.Reader
 }
 
@@ -65,107 +76,124 @@ func (s *Service) Info(alias string) error {
 }
 
 func (s *Service) Update() error {
-	files, err := s.fsReader.ReadDir(s.repositoriesPath)
-	if err != nil {
-		return err
-	}
-
-	filesMap := make(map[string]bool)
-	for _, file := range files {
-		// we only care about git repositories, which are directories
-		if !file.IsDir() {
-			continue
-		}
-		filesMap[file.Name()] = true
-	}
-
 	itr := s.repositoriesDB.NewIterator()
 	for itr.Next() {
-		repositoryName := string(itr.Key())
-		repositoryURL := string(itr.Value())
-		repositoryPath := filepath.Join(s.repositoriesPath, repositoryName)
+		// Need to split the alias to support Windows
+		aliasBytes := itr.Key()
+		alias := string(aliasBytes)
+		aliasSplit := strings.Split(alias, "/")
+		organizationName := aliasSplit[0]
+		repositoryName := aliasSplit[1]
 
-		if _, ok := filesMap[repositoryName]; ok {
+		repositoryURL := string(itr.Value())
+		repositoryPath := filepath.Join(s.repositoriesPath, organizationName, repositoryName)
+
+		var gitRepository *git.Repository
+
+		if _, err := os.Stat(repositoryPath); err == nil {
 			// already exists, we need to check out the latest changes
-			gitRepository, err := git.PlainOpen(repositoryPath)
+			gitRepository, err = git.PlainOpen(repositoryPath)
 			if err != nil {
 				return err
 			}
-
-			// fetch latest changes
-			err = gitRepository.Fetch(&git.FetchOptions{
-				RemoteName: "origin",
+			worktree, err := gitRepository.Worktree()
+			if err != nil {
+				return err
+			}
+			err = worktree.Pull(
+				//TODO use fetch + checkout instead of pull
+				&git.PullOptions{
+					RemoteName:    "origin",
+					Auth:          auth,
+					ReferenceName: "refs/heads/testing",
+					SingleBranch:  true,
+				},
+			)
+		} else if os.IsNotExist(err) {
+			// otherwise, we need to clone the repository
+			gitRepository, err = git.PlainClone(repositoryPath, false, &git.CloneOptions{
+				URL:           repositoryURL,
+				Progress:      os.Stdout,
+				Auth:          auth,
+				ReferenceName: "refs/heads/testing",
+				SingleBranch:  true,
 			})
 			if err != nil {
 				return err
 			}
 		} else {
-			// otherwise, we need to clone the repository
-			_, err := git.PlainClone(repositoryPath, false, &git.CloneOptions{
-				URL:      repositoryURL,
-				Progress: os.Stdout,
-			})
-			if err != nil {
+			panic(err)
+		}
+
+		head, err := gitRepository.Head()
+		if err != nil {
+			return err
+		}
+
+		var previousCommit plumbing.Hash
+		previousCommitBytes, err := s.syncedDB.Get(aliasBytes)
+		if err != nil && err != database.ErrNotFound {
+			return err
+		}
+		copy(previousCommit[:], previousCommitBytes)
+
+		// Our head should have the latest changes now
+		head, err = gitRepository.Head()
+		if err != nil {
+			return err
+		}
+
+		// TODO graceful failure, don't block on a single repo failing to sync
+		// If our hashes don't match, we need to re-build our binary
+		if head.Hash() != previousCommit {
+			fmt.Printf("Changes detected. Re-building binaries for %s@%s.\n", repositoryName, head.Hash())
+			//TODO execute build script instead.
+			build := exec.Command("go", "build", "-o", fmt.Sprintf("%s/%s", s.buildPath, repositoryName), fmt.Sprintf("%s/main", repositoryPath))
+			// Need to set working directory to the same directory where go.mod
+			// is or go buildDir won't work.
+			build.Dir = repositoryPath
+
+			if err := build.Run(); err != nil {
 				return err
 			}
+			pluginMap := map[string]plugin.Plugin{
+				constant.Repository: &grpc.PluginRepository{},
+			}
+
+			binaryPath := filepath.Join(s.buildPath, repositoryName)
+			client := plugin.NewClient(&plugin.ClientConfig{
+				HandshakeConfig:  core.HandshakeConfig,
+				Plugins:          pluginMap,
+				Cmd:              subprocess.New(binaryPath),
+				AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+			})
+
+			rpcClient, err := client.Client()
+			if err != nil {
+				client.Kill()
+				return err
+			}
+
+			// request the repository
+			raw, err := rpcClient.Dispense(constant.Repository)
+			if err != nil {
+				client.Kill()
+				return err
+			}
+
+			repository := raw.(avaxPlugin.Repository)
+			//repositoryDB := prefixdb.New([]byte(repositoryName), s.db)
+
+			subnets, err := repository.GetSubnets()
+			if err != nil {
+				client.Kill()
+				return err
+			}
+
+			fmt.Printf("loaded subnets: %s", subnets)
+			// TODO refactor and use defer
+			client.Kill()
 		}
-
-		// build the repository binary
-		build := subprocess.New(filepath.Join(repositoryPath, "scripts", "build.sh"))
-		if err := build.Run(); err != nil {
-			return err
-		}
-
-		pluginMap := map[string]plugin.Plugin{
-			"repository": &avaxPlugin.RPCRepository{},
-		}
-
-		binaryPath := filepath.Join(repositoryPath, "build", repositoryName)
-		client := plugin.NewClient(&plugin.ClientConfig{
-			HandshakeConfig: core.HandshakeConfig,
-			Plugins:         pluginMap,
-			Cmd:             subprocess.New(binaryPath),
-		})
-
-		rpcClient, err := client.Client()
-		if err != nil {
-			return err
-		}
-
-		// request the repository
-		raw, err := rpcClient.Dispense("repository")
-		if err != nil {
-			return err
-		}
-
-		repository := raw.(avaxPlugin.Repository)
-		//repositoryDB := prefixdb.New([]byte(repositoryName), s.db)
-
-		plugins, err := repository.Plugins()
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("loaded plugins: %s", plugins)
-
-		//for _, subnet := range plugins.Subnets {
-		//	subnetKey := []byte(subnet.Alias())
-		//
-		//	bytes, err := repositoryDB.Get(subnetKey)
-		//	if err != nil && err != database.ErrNotFound {
-		//		return err
-		//	}
-		//	if err == database.ErrNotFound {
-		//
-		//	}
-		//
-		//	if err := repositoryDB.Put([]byte(subnet.Alias()), subnet); err != nil {
-		//		return err
-		//	}
-		//}
-		// DO this for vms too
-
-		client.Kill()
 	}
 	return nil
 }
@@ -200,34 +228,36 @@ func (s *Service) ListRepositories() []string {
 }
 
 func New(config Config) (*Service, error) {
-	dbDir := filepath.Join(config.WorkingDir, dbPath)
+	dbDir := filepath.Join(config.WorkingDir, dbDir)
 	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{})
 	if err != nil {
 		return nil, err
 	}
 
 	repoDB := prefixdb.New(repoPrefix, db)
-	bootstrapDB := prefixdb.New(bootstrapPrefix, db)
+	syncedDB := prefixdb.New(syncedPrefix, db)
 
-	// initialize codec
-	c := linearcodec.NewDefault()
-	errs := wrappers.Errs{}
-	errs.Add(
-		c.RegisterType(&avaxPlugin.RPCRepository{}),
-	)
-	if errs.Errored() {
-		return nil, errs.Err
-	}
+	//initialize codec
+	//c := linearcodec.NewDefault()
+	//errs := wrappers.Errs{}
+	//errs.Add(
+	//	c.RegisterType(&grpc.PluginRepository{}),
+	//)
+	//if errs.Errored() {
+	//	return nil, errs.Err
+	//}
 
-	codecManager := codec.NewDefaultManager()
-	if err := codecManager.RegisterCodec(codecVersion, c); err != nil {
-		return nil, err
-	}
+	//codecManager := codec.NewDefaultManager()
+	//if err := codecManager.RegisterCodec(codecVersion, c); err != nil {
+	//	return nil, err
+	//}
 
 	s := &Service{
-		codecManager:     codecManager,
-		repositoriesPath: filepath.Join(config.WorkingDir, repositoriesPath),
+		//codecManager:     codecManager,
+		repositoriesPath: filepath.Join(config.WorkingDir, repositoriesDir),
+		buildPath:        filepath.Join(config.WorkingDir, buildDir),
 		db:               db,
+		syncedDB:         syncedDB,
 		repositoriesDB:   repoDB,
 		fsReader:         config.FsReader,
 	}
@@ -235,23 +265,26 @@ func New(config Config) (*Service, error) {
 	if err := os.MkdirAll(s.repositoriesPath, perms.ReadWriteExecute); err != nil {
 		return nil, err
 	}
+	if err := os.MkdirAll(s.buildPath, perms.ReadWriteExecute); err != nil {
+		return nil, err
+	}
 
-	if _, err = repoDB.Get([]byte(core.Name)); err == database.ErrNotFound {
-		err := s.AddRepository(core.Name, core.URL)
+	coreKey := []byte(core.Alias)
+	if _, err = repoDB.Get(coreKey); err == database.ErrNotFound {
+		err := s.AddRepository(core.Alias, core.URL)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	if _, err := bootstrapDB.Get(bootstrappedKey); err == database.ErrNotFound {
+	if _, err := syncedDB.Get(coreKey); err == database.ErrNotFound {
+		fmt.Println("Bootstrap not detected. Bootstrapping...")
 		err := s.Update()
 		if err != nil {
 			return nil, err
 		}
 
-		if err := bootstrapDB.Put(bootstrappedKey, bootstrappedKey); err != nil {
-			return nil, err
-		}
+		fmt.Println("Finished bootstrapping.")
 	}
 
 	return s, nil
