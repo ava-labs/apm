@@ -5,10 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ava-labs/avalanchego/utils/filesystem"
-
+	"github.com/ava-labs/apm/api"
 	"github.com/ava-labs/apm/constant"
-	"github.com/ava-labs/apm/service"
 )
 
 var (
@@ -19,10 +17,9 @@ var (
 func main() {
 	var err error
 
-	_, err = service.New(
-		service.Config{
+	_, err = api.New(
+		api.Config{
 			WorkingDir: workingDir,
-			FsReader:   filesystem.NewReader(),
 		},
 	)
 

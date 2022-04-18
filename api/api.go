@@ -1,38 +1,43 @@
-package service
+package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/ava-labs/avalanchego/codec"
+	"github.com/ava-labs/avalanchego/codec/linearcodec"
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/leveldb"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
-	"github.com/ava-labs/avalanchego/utils/filesystem"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/perms"
-	"github.com/ava-labs/avalanchego/utils/subprocess"
+	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/hashicorp/go-plugin"
+	"gopkg.in/yaml.v2"
 
-	"github.com/ava-labs/avalanche-plugin/constant"
-	"github.com/ava-labs/avalanche-plugin/grpc"
-	avaxPlugin "github.com/ava-labs/avalanche-plugin/plugin"
+	"github.com/ava-labs/apm/repository"
+	"github.com/ava-labs/apm/types"
 	"github.com/ava-labs/avalanche-plugins-core/core"
 )
 
 var (
 	dbDir           = "db"
 	repositoriesDir = "repositories"
+	subnetsDir      = "subnets"
+	vmsDir          = "vms"
 	buildDir        = "build"
 
 	repoPrefix   = []byte("repo")
 	syncedPrefix = []byte("synced")
+
+	vmKey     = "vm"
+	subnetKey = "subnet"
 
 	codecVersion uint16 = 1
 
@@ -47,12 +52,9 @@ type Service struct {
 	repositoriesPath string
 	buildPath        string
 
-	codecManager codec.Manager
-	db           database.Database
-	//TODO merge these databases together
+	codecManager   codec.Manager
+	db             database.Database
 	repositoriesDB database.Database
-	syncedDB       database.Database
-	fsReader       filesystem.Reader
 }
 
 func (s *Service) Install(alias string) error {
@@ -85,7 +87,7 @@ func (s *Service) Update() error {
 		organizationName := aliasSplit[0]
 		repositoryName := aliasSplit[1]
 
-		repositoryURL := string(itr.Value())
+		repositoryMetadata, err := s.repositoryMetadataFor(aliasBytes)
 		repositoryPath := filepath.Join(s.repositoriesPath, organizationName, repositoryName)
 
 		var gitRepository *git.Repository
@@ -104,19 +106,20 @@ func (s *Service) Update() error {
 				//TODO use fetch + checkout instead of pull
 				&git.PullOptions{
 					RemoteName:    "origin",
-					Auth:          auth,
-					ReferenceName: "refs/heads/testing",
+					ReferenceName: "refs/heads/yaml",
 					SingleBranch:  true,
+					Auth:          auth,
+					Progress:      ioutil.Discard,
 				},
 			)
 		} else if os.IsNotExist(err) {
 			// otherwise, we need to clone the repository
 			gitRepository, err = git.PlainClone(repositoryPath, false, &git.CloneOptions{
-				URL:           repositoryURL,
-				Progress:      os.Stdout,
-				Auth:          auth,
-				ReferenceName: "refs/heads/testing",
+				URL:           repositoryMetadata.URL,
+				ReferenceName: "refs/heads/yaml",
 				SingleBranch:  true,
+				Auth:          auth,
+				Progress:      ioutil.Discard,
 			})
 			if err != nil {
 				return err
@@ -130,90 +133,130 @@ func (s *Service) Update() error {
 			return err
 		}
 
-		var previousCommit plumbing.Hash
-		previousCommitBytes, err := s.syncedDB.Get(aliasBytes)
-		if err != nil && err != database.ErrNotFound {
-			return err
-		}
-		copy(previousCommit[:], previousCommitBytes)
+		previousCommit := repositoryMetadata.Commit
 
 		// Our head should have the latest changes now
 		head, err = gitRepository.Head()
 		if err != nil {
 			return err
 		}
+		latestCommit := head.Hash()
 
-		// TODO graceful failure, don't block on a single repo failing to sync
-		// If our hashes don't match, we need to re-build our binary
-		if head.Hash() != previousCommit {
-			fmt.Printf("Changes detected. Re-building binaries for %s@%s.\n", repositoryName, head.Hash())
-			//TODO execute build script instead.
-			build := exec.Command("go", "build", "-o", fmt.Sprintf("%s/%s", s.buildPath, repositoryName), fmt.Sprintf("%s/main", repositoryPath))
-			// Need to set working directory to the same directory where go.mod
-			// is or go buildDir won't work.
-			build.Dir = repositoryPath
+		if latestCommit == previousCommit {
+			fmt.Printf("Already at latest for %s@%s.\n", repositoryName, previousCommit)
+			continue
+		}
 
-			if err := build.Run(); err != nil {
-				return err
-			}
-			pluginMap := map[string]plugin.Plugin{
-				constant.Repository: &grpc.PluginRepository{},
-			}
+		vmsPath := filepath.Join(repositoryPath, vmsDir)
+		if err := loadFromYAML[*types.VM](vmKey, vmsPath, aliasBytes, s.db); err != nil {
+			return err
+		}
 
-			binaryPath := filepath.Join(s.buildPath, repositoryName)
-			client := plugin.NewClient(&plugin.ClientConfig{
-				HandshakeConfig:  core.HandshakeConfig,
-				Plugins:          pluginMap,
-				Cmd:              subprocess.New(binaryPath),
-				AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
-			})
+		subnetsPath := filepath.Join(repositoryPath, subnetsDir)
+		if err := loadFromYAML[*types.Subnet](subnetKey, subnetsPath, aliasBytes, s.db); err != nil {
+			return err
+		}
+		updatedMetadata := repository.Metadata{
+			Alias:  repositoryMetadata.Alias,
+			URL:    repositoryMetadata.URL,
+			Commit: latestCommit,
+		}
+		updatedMetadataBytes, err := json.Marshal(updatedMetadata)
 
-			rpcClient, err := client.Client()
-			if err != nil {
-				client.Kill()
-				return err
-			}
+		if err != nil {
+			return err
+		}
 
-			// request the repository
-			raw, err := rpcClient.Dispense(constant.Repository)
-			if err != nil {
-				client.Kill()
-				return err
-			}
+		if err := s.repositoriesDB.Put(aliasBytes, updatedMetadataBytes); err != nil {
+			return err
+		}
 
-			repository := raw.(avaxPlugin.Repository)
-			//repositoryDB := prefixdb.New([]byte(repositoryName), s.db)
-
-			subnets, err := repository.GetSubnets()
-			if err != nil {
-				client.Kill()
-				return err
-			}
-
-			fmt.Printf("loaded subnets: %s", subnets)
-			// TODO refactor and use defer
-			client.Kill()
+		if previousCommit == plumbing.ZeroHash {
+			fmt.Printf("Finished initializing %s@%s.\n", repositoryName, latestCommit)
+		} else {
+			fmt.Printf("Finished updating from %s to %s@%s.\n", previousCommit, repositoryName, latestCommit)
 		}
 	}
+
+	return nil
+}
+
+func loadFromYAML[T types.Plugin](
+	key string,
+	path string,
+	repositoryAlias []byte,
+	db database.Database,
+) error {
+	files, err := os.ReadDir(path)
+	if err != nil {
+		return err
+	}
+
+	repositoryDB := prefixdb.New(repositoryAlias, db)
+	batch := repositoryDB.NewBatch()
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		nameWithExtension := file.Name()
+		// Strip any extension from the file. This is to support windows .exe
+		// files.
+		name := nameWithExtension[:len(nameWithExtension)-len(filepath.Ext(nameWithExtension))]
+
+		// Skip hidden files.
+		if len(name) == 0 {
+			continue
+		}
+
+		bytes, err := os.ReadFile(filepath.Join(path, file.Name()))
+		if err != nil {
+			return err
+		}
+		data := make(map[string]T)
+
+		if err := yaml.Unmarshal(bytes, data); err != nil {
+			return err
+		}
+
+		if err := batch.Put([]byte(data[key].Alias()), []byte(file.Name())); err != nil {
+			return err
+		}
+	}
+	if err := batch.Write(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (s *Service) AddRepository(alias string, url string) error {
-	return s.repositoriesDB.Put([]byte(alias), []byte(url))
+	metadata := repository.Metadata{
+		Alias:  alias,
+		URL:    url,
+		Commit: plumbing.ZeroHash,
+	}
+	metadataBytes, err := json.Marshal(metadata)
+	if err != nil {
+		return err
+	}
+	return s.repositoriesDB.Put([]byte(alias), metadataBytes)
 }
 
 func (s *Service) RemoveRepository(alias string) error {
 	aliasBytes := []byte(alias)
-	repository := prefixdb.New(aliasBytes, s.db)
-	itr := repository.NewIterator()
+	repoDB := prefixdb.New(aliasBytes, s.db)
+	itr := repoDB.NewIterator()
 
-	// Delete all the plugin definitions in the repository
+	// delete all the plugin definitions in the repository
 	for itr.Next() {
-		if err := repository.Delete(itr.Key()); err != nil {
+		if err := repoDB.Delete(itr.Key()); err != nil {
 			return err
 		}
 	}
 
+	// remove it from our list of tracked repositories
 	return s.repositoriesDB.Delete(aliasBytes)
 }
 
@@ -235,31 +278,29 @@ func New(config Config) (*Service, error) {
 	}
 
 	repoDB := prefixdb.New(repoPrefix, db)
-	syncedDB := prefixdb.New(syncedPrefix, db)
 
 	//initialize codec
-	//c := linearcodec.NewDefault()
-	//errs := wrappers.Errs{}
+	c := linearcodec.NewDefault()
+	errs := wrappers.Errs{}
 	//errs.Add(
-	//	c.RegisterType(&grpc.PluginRepository{}),
+	//	c.RegisterType(&grpc.Subnet{}),
+	//	c.RegisterType(&grpc.VM{}),
 	//)
-	//if errs.Errored() {
-	//	return nil, errs.Err
-	//}
+	if errs.Errored() {
+		return nil, errs.Err
+	}
 
-	//codecManager := codec.NewDefaultManager()
-	//if err := codecManager.RegisterCodec(codecVersion, c); err != nil {
-	//	return nil, err
-	//}
+	codecManager := codec.NewDefaultManager()
+	if err := codecManager.RegisterCodec(codecVersion, c); err != nil {
+		return nil, err
+	}
 
 	s := &Service{
-		//codecManager:     codecManager,
+		codecManager:     codecManager,
 		repositoriesPath: filepath.Join(config.WorkingDir, repositoriesDir),
 		buildPath:        filepath.Join(config.WorkingDir, buildDir),
 		db:               db,
-		syncedDB:         syncedDB,
 		repositoriesDB:   repoDB,
-		fsReader:         config.FsReader,
 	}
 
 	if err := os.MkdirAll(s.repositoriesPath, perms.ReadWriteExecute); err != nil {
@@ -269,6 +310,7 @@ func New(config Config) (*Service, error) {
 		return nil, err
 	}
 
+	//TODO simplify this
 	coreKey := []byte(core.Alias)
 	if _, err = repoDB.Get(coreKey); err == database.ErrNotFound {
 		err := s.AddRepository(core.Alias, core.URL)
@@ -277,7 +319,12 @@ func New(config Config) (*Service, error) {
 		}
 	}
 
-	if _, err := syncedDB.Get(coreKey); err == database.ErrNotFound {
+	repoMetadata, err := s.repositoryMetadataFor(coreKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if repoMetadata.Commit == plumbing.ZeroHash {
 		fmt.Println("Bootstrap not detected. Bootstrapping...")
 		err := s.Update()
 		if err != nil {
@@ -286,11 +333,23 @@ func New(config Config) (*Service, error) {
 
 		fmt.Println("Finished bootstrapping.")
 	}
-
 	return s, nil
+}
+
+func (s *Service) repositoryMetadataFor(alias []byte) (*repository.Metadata, error) {
+	repositoryMetadataBytes, err := s.repositoriesDB.Get(alias)
+	if err != nil && err != database.ErrNotFound {
+		return nil, err
+	}
+
+	repositoryMetadata := &repository.Metadata{}
+	if err := json.Unmarshal(repositoryMetadataBytes, repositoryMetadata); err != nil {
+		return nil, err
+	}
+
+	return repositoryMetadata, nil
 }
 
 type Config struct {
 	WorkingDir string
-	FsReader   filesystem.Reader
 }
