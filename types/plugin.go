@@ -6,5 +6,4 @@ type Plugin interface {
 	Homepage() string
 	Description() string
 	Maintainers() []string
-	InstallScript() string
 }

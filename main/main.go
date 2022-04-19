@@ -17,7 +17,7 @@ var (
 func main() {
 	var err error
 
-	_, err = api.New(
+	api, err := api.New(
 		api.Config{
 			WorkingDir: workingDir,
 		},
@@ -46,6 +46,8 @@ func main() {
 	//	fmt.Println("invalid command")
 	//	os.Exit(2)
 	//}
+	api.Update()
+	api.ListRepositories()
 
 	if err != nil {
 		fmt.Printf("unexpected error: %s\n", err)

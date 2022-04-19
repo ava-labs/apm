@@ -1,12 +1,13 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/ava-labs/avalanchego/codec"
 	"github.com/ava-labs/avalanchego/codec/linearcodec"
@@ -27,14 +28,14 @@ import (
 )
 
 var (
-	dbDir           = "db"
-	repositoriesDir = "repositories"
-	subnetsDir      = "subnets"
-	vmsDir          = "vms"
-	buildDir        = "build"
+	dbDir        = "db"
+	repositories = "repositories"
+	subnets      = "subnets"
+	vms          = "vms"
 
 	repoPrefix   = []byte("repo")
-	syncedPrefix = []byte("synced")
+	vmPrefix     = []byte("vm")
+	subnetPrefix = []byte("subnet")
 
 	vmKey     = "vm"
 	subnetKey = "subnet"
@@ -50,18 +51,61 @@ var (
 
 type Service struct {
 	repositoriesPath string
-	buildPath        string
 
-	codecManager   codec.Manager
-	db             database.Database
-	repositoriesDB database.Database
+	codecManager codec.Manager
+
+	db           database.Database
+	repositoryDB database.Database
+	subnetDB     database.Database
+	vmDB         database.Database
 }
 
 func (s *Service) Install(alias string) error {
+	var vm = &types.VM{}
+
+	itr := s.repositoryDB.NewIterator()
+
+	for itr.Next() {
+		repoDB := prefixdb.New(itr.Key(), s.db)
+		vmDB := prefixdb.New(vmPrefix, repoDB)
+
+		vmBytes, err := vmDB.Get([]byte(alias))
+		if err == database.ErrNotFound {
+			// This alias didn't exist in this repository
+			continue
+		}
+		if err != nil {
+			return err
+		}
+
+		err = yaml.Unmarshal(vmBytes, vm)
+		if err != nil {
+			return err
+		}
+	}
+
+	if vm.URL != "" {
+
+	}
+
+	if vm.InstallScript != "" {
+		cmd := exec.Cmd{
+			Path: vm.InstallScript,
+			Dir:  "",
+		}
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 func (s *Service) Uninstall(alias string) error {
+	return nil
+}
+
+func (s *Service) Join(alias string) error {
 	return nil
 }
 
@@ -78,7 +122,11 @@ func (s *Service) Info(alias string) error {
 }
 
 func (s *Service) Update() error {
-	itr := s.repositoriesDB.NewIterator()
+	itr := s.repositoryDB.NewIterator()
+
+	globalVMs := prefixdb.New(vmPrefix, s.db)
+	globalSubnets := prefixdb.New(subnetPrefix, s.db)
+
 	for itr.Next() {
 		// Need to split the alias to support Windows
 		aliasBytes := itr.Key()
@@ -125,7 +173,7 @@ func (s *Service) Update() error {
 				return err
 			}
 		} else {
-			panic(err)
+			return err
 		}
 
 		head, err := gitRepository.Head()
@@ -147,27 +195,39 @@ func (s *Service) Update() error {
 			continue
 		}
 
-		vmsPath := filepath.Join(repositoryPath, vmsDir)
-		if err := loadFromYAML[*types.VM](vmKey, vmsPath, aliasBytes, s.db); err != nil {
+		repoDB := prefixdb.New(aliasBytes, s.repositoryDB)
+
+		vmsPath := filepath.Join(repositoryPath, vms)
+		repoVMs := prefixdb.New(vmPrefix, repoDB)
+		if err := loadFromYAML[*types.VM](vmKey, vmsPath, aliasBytes, latestCommit, globalVMs, repoVMs); err != nil {
 			return err
 		}
 
-		subnetsPath := filepath.Join(repositoryPath, subnetsDir)
-		if err := loadFromYAML[*types.Subnet](subnetKey, subnetsPath, aliasBytes, s.db); err != nil {
+		subnetsPath := filepath.Join(repositoryPath, subnets)
+		repoSubnets := prefixdb.New(subnetPrefix, repoDB)
+		if err := loadFromYAML[*types.Subnet](subnetKey, subnetsPath, aliasBytes, latestCommit, globalSubnets, repoSubnets); err != nil {
 			return err
 		}
+
+		// Now we need to delete anything that wasn't updated in the latest commit
+		if err := deleteStalePlugins[*types.VM](repoVMs, latestCommit); err != nil {
+			return err
+		}
+		if err := deleteStalePlugins[*types.Subnet](repoSubnets, latestCommit); err != nil {
+			return err
+		}
+
 		updatedMetadata := repository.Metadata{
 			Alias:  repositoryMetadata.Alias,
 			URL:    repositoryMetadata.URL,
 			Commit: latestCommit,
 		}
-		updatedMetadataBytes, err := json.Marshal(updatedMetadata)
-
+		updatedMetadataBytes, err := yaml.Marshal(updatedMetadata)
 		if err != nil {
 			return err
 		}
 
-		if err := s.repositoriesDB.Put(aliasBytes, updatedMetadataBytes); err != nil {
+		if err := s.repositoryDB.Put(aliasBytes, updatedMetadataBytes); err != nil {
 			return err
 		}
 
@@ -181,67 +241,42 @@ func (s *Service) Update() error {
 	return nil
 }
 
-func loadFromYAML[T types.Plugin](
-	key string,
-	path string,
-	repositoryAlias []byte,
-	db database.Database,
-) error {
-	files, err := os.ReadDir(path)
-	if err != nil {
-		return err
-	}
+func deleteStalePlugins[T types.Plugin](db database.Database, latestCommit plumbing.Hash) error {
+	itr := db.NewIterator()
+	batch := db.NewBatch()
 
-	repositoryDB := prefixdb.New(repositoryAlias, db)
-	batch := repositoryDB.NewBatch()
-
-	for _, file := range files {
-		if file.IsDir() {
-			continue
+	for itr.Next() {
+		record := &repository.Record[T]{}
+		if err := yaml.Unmarshal(itr.Value(), record); err != nil {
+			return nil
 		}
 
-		nameWithExtension := file.Name()
-		// Strip any extension from the file. This is to support windows .exe
-		// files.
-		name := nameWithExtension[:len(nameWithExtension)-len(filepath.Ext(nameWithExtension))]
-
-		// Skip hidden files.
-		if len(name) == 0 {
-			continue
-		}
-
-		bytes, err := os.ReadFile(filepath.Join(path, file.Name()))
-		if err != nil {
-			return err
-		}
-		data := make(map[string]T)
-
-		if err := yaml.Unmarshal(bytes, data); err != nil {
-			return err
-		}
-
-		if err := batch.Put([]byte(data[key].Alias()), []byte(file.Name())); err != nil {
-			return err
+		if record.Commit != latestCommit {
+			fmt.Printf("Deleting a stale plugin: %s@%s as of %s.\n", record.Plugin.Alias(), record.Commit, latestCommit)
+			if err := batch.Delete(itr.Key()); err != nil {
+				return err
+			}
 		}
 	}
+
 	if err := batch.Write(); err != nil {
 		return err
 	}
-
 	return nil
 }
 
 func (s *Service) AddRepository(alias string, url string) error {
+	//TODO should be idempotent
 	metadata := repository.Metadata{
 		Alias:  alias,
 		URL:    url,
-		Commit: plumbing.ZeroHash,
+		Commit: plumbing.ZeroHash, // hasn't been synced yet
 	}
-	metadataBytes, err := json.Marshal(metadata)
+	metadataBytes, err := yaml.Marshal(metadata)
 	if err != nil {
 		return err
 	}
-	return s.repositoriesDB.Put([]byte(alias), metadataBytes)
+	return s.repositoryDB.Put([]byte(alias), metadataBytes)
 }
 
 func (s *Service) RemoveRepository(alias string) error {
@@ -255,19 +290,27 @@ func (s *Service) RemoveRepository(alias string) error {
 			return err
 		}
 	}
+	//TODO remove from subnets + vms
 
 	// remove it from our list of tracked repositories
-	return s.repositoriesDB.Delete(aliasBytes)
+	return s.repositoryDB.Delete(aliasBytes)
 }
 
-func (s *Service) ListRepositories() []string {
-	repos := make([]string, 0)
-	itr := s.repositoriesDB.NewIterator()
-	for itr.Next() {
-		repos = append(repos, string(itr.Key()))
-	}
+func (s *Service) ListRepositories() error {
+	itr := s.repositoryDB.NewIterator()
 
-	return repos
+	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
+	fmt.Fprintln(w, "alias\turl")
+	for itr.Next() {
+		metadata := &repository.Metadata{}
+		if err := yaml.Unmarshal(itr.Value(), metadata); err != nil {
+			return err
+		}
+
+		fmt.Fprintln(w, fmt.Sprintf("%s\t%s", metadata.Alias, metadata.URL))
+	}
+	w.Flush()
+	return nil
 }
 
 func New(config Config) (*Service, error) {
@@ -297,16 +340,12 @@ func New(config Config) (*Service, error) {
 
 	s := &Service{
 		codecManager:     codecManager,
-		repositoriesPath: filepath.Join(config.WorkingDir, repositoriesDir),
-		buildPath:        filepath.Join(config.WorkingDir, buildDir),
+		repositoriesPath: filepath.Join(config.WorkingDir, repositories),
 		db:               db,
-		repositoriesDB:   repoDB,
+		repositoryDB:     repoDB,
 	}
 
 	if err := os.MkdirAll(s.repositoriesPath, perms.ReadWriteExecute); err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(s.buildPath, perms.ReadWriteExecute); err != nil {
 		return nil, err
 	}
 
@@ -337,13 +376,13 @@ func New(config Config) (*Service, error) {
 }
 
 func (s *Service) repositoryMetadataFor(alias []byte) (*repository.Metadata, error) {
-	repositoryMetadataBytes, err := s.repositoriesDB.Get(alias)
+	repositoryMetadataBytes, err := s.repositoryDB.Get(alias)
 	if err != nil && err != database.ErrNotFound {
 		return nil, err
 	}
 
 	repositoryMetadata := &repository.Metadata{}
-	if err := json.Unmarshal(repositoryMetadataBytes, repositoryMetadata); err != nil {
+	if err := yaml.Unmarshal(repositoryMetadataBytes, repositoryMetadata); err != nil {
 		return nil, err
 	}
 
