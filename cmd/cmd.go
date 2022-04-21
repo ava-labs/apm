@@ -30,6 +30,7 @@ func init() {
 	}
 	rootCmd.AddCommand(
 		Install(),
+		ListRepositories(),
 	)
 }
 
@@ -56,5 +57,26 @@ func Install() *cobra.Command {
 	}
 
 	command.RunE = install
+	return command
+}
+
+func ListRepositories() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "list-repositories",
+		Short: "list registered source repositories for avalanche plugins",
+	}
+
+	listRepositories := func(_ *cobra.Command, _ []string) error {
+		apm, err := apm.New(apm.Config{
+			WorkingDir: workingDir,
+		})
+		if err != nil {
+			return err
+		}
+
+		return apm.ListRepositories()
+	}
+
+	command.RunE = listRepositories
 	return command
 }
