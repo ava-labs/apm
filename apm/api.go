@@ -253,11 +253,13 @@ func (a *APM) join(fullName string) error {
 		return err
 	}
 
-	subnet := &types.Subnet{}
-	if err := yaml.Unmarshal(subnetBytes, subnet); err != nil {
+	record := &repository.Record[*types.Subnet]{}
+	if err := yaml.Unmarshal(subnetBytes, record); err != nil {
 		return err
 	}
+	subnet := record.Plugin
 
+	// TODO prompt user, add force flag
 	fmt.Printf("Installing virtual machines for subnet %s.\n", subnet.ID_)
 	for _, vm := range subnet.VMs_ {
 		if err := a.Install(vm); err != nil {
