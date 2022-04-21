@@ -339,6 +339,7 @@ func deleteStalePlugins[T types.Plugin](db database.Database, latestCommit plumb
 }
 
 func (a *APM) AddRepository(alias string, url string) error {
+	//TODO don't let people remove core
 	//TODO should be idempotent
 	metadata := repository.Metadata{
 		Alias:  alias,
