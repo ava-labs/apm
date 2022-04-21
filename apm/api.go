@@ -40,6 +40,8 @@ var (
 	vmKey     = "vm"
 	subnetKey = "subnet"
 
+	pluginDir = filepath.Join(os.ExpandEnv("$GOPATH"), "src", "github.com", "ava-labs", "avalanchego", "build", "plugins")
+
 	auth = &http.BasicAuth{
 		Username: "personal access token",
 		Password: "<YOUR PERSONAL ACCESS TOKEN HERE>",
@@ -176,12 +178,18 @@ Loop:
 	}
 
 	workingDir := filepath.Join(tmpPath, plugin)
-	fmt.Printf("Running install script...\n")
+	fmt.Printf("Running install script at %s...\n", vm.InstallScript)
 	cmd = exec.Command(vm.InstallScript)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Dir = workingDir
 	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	fmt.Printf("Moving binary %s into plugin directory...\n", vm.ID_)
+	if err := os.Rename(filepath.Join(workingDir, vm.BinaryPath), filepath.Join(pluginDir, vm.ID_)); err != nil {
+		panic(err)
 		return err
 	}
 
@@ -196,6 +204,7 @@ Loop:
 		return err
 	}
 
+	fmt.Printf("Adding virtual machine %s to installation registry...\n", vm.ID_)
 	installedVersion, err := yaml.Marshal(vm.Version)
 	if err != nil {
 		return err

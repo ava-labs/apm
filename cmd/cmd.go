@@ -45,7 +45,9 @@ func Install() *cobra.Command {
 	command.PersistentFlags().StringVar(&vmAlias, "vm-alias", "", "vm alias to install")
 
 	install := func(_ *cobra.Command, _ []string) error {
-		apm, err := apm.New(apm.Config{})
+		apm, err := apm.New(apm.Config{
+			WorkingDir: workingDir,
+		})
 		if err != nil {
 			return err
 		}

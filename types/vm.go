@@ -11,6 +11,7 @@ type VM struct {
 	Description_  string                  `yaml:"description"`
 	Maintainers_  []string                `yaml:"maintainers"`
 	InstallScript string                  `yaml:"installScript"`
+	BinaryPath    string                  `yaml:"binaryPath"`
 	URL           string                  `yaml:"url"`
 	SHA256        string                  `yaml:"sha256"`
 	Version       version.SemanticVersion `yaml:"version"`
