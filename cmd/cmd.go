@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/spf13/cobra"
 
 	"github.com/ava-labs/apm/apm"
@@ -13,6 +14,7 @@ import (
 
 var (
 	homeDir    = os.ExpandEnv("$HOME")
+	password   = os.ExpandEnv("$AUTH_TOKEN")
 	workingDir = filepath.Join(homeDir, fmt.Sprintf(".%s", constant.AppName))
 
 	rootCmd *cobra.Command
@@ -46,13 +48,19 @@ func Install() *cobra.Command {
 	command.PersistentFlags().StringVar(&vmAlias, "vm-alias", "", "vm alias to install")
 
 	install := func(_ *cobra.Command, _ []string) error {
+
+		authToken := http.BasicAuth{
+			Username: "personal access token",
+			Password: password,
+		}
+
 		apm, err := apm.New(apm.Config{
 			WorkingDir: workingDir,
+			Auth:       &authToken,
 		})
 		if err != nil {
 			return err
 		}
-
 		return apm.Install(vmAlias)
 	}
 
@@ -67,8 +75,14 @@ func ListRepositories() *cobra.Command {
 	}
 
 	listRepositories := func(_ *cobra.Command, _ []string) error {
+		authToken := http.BasicAuth{
+			Username: "personal access token",
+			Password: password,
+		}
+
 		apm, err := apm.New(apm.Config{
 			WorkingDir: workingDir,
+			Auth:       &authToken,
 		})
 		if err != nil {
 			return err

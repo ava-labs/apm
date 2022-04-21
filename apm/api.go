@@ -3,6 +3,7 @@ package apm
 import (
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/cavaliergopher/grab/v3"
+	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"gopkg.in/yaml.v2"
@@ -41,11 +43,6 @@ var (
 	subnetKey = "subnet"
 
 	pluginDir = filepath.Join(os.ExpandEnv("$GOPATH"), "src", "github.com", "ava-labs", "avalanchego", "build", "plugins")
-
-	auth = &http.BasicAuth{
-		Username: "personal access token",
-		Password: "<YOUR PERSONAL ACCESS TOKEN HERE>",
-	}
 )
 
 type APM struct {
@@ -58,6 +55,8 @@ type APM struct {
 	vmDB         database.Database
 
 	installedVMs database.Database
+
+	auth *http.BasicAuth
 }
 
 func (a *APM) Install(alias string) error {
@@ -247,7 +246,7 @@ func (a *APM) Update() error {
 
 		repositoryMetadata, err := a.repositoryMetadataFor(aliasBytes)
 		repositoryPath := filepath.Join(a.repositoriesPath, organization, repo)
-		gitRepository, err := syncRepository(repositoryMetadata.URL, repositoryPath, "refs/heads/main")
+		gitRepository, err := a.syncRepository(repositoryMetadata.URL, repositoryPath, "refs/heads/main")
 
 		head, err := gitRepository.Head()
 		if err != nil {
@@ -402,6 +401,7 @@ func New(config Config) (*APM, error) {
 		subnetDB:         prefixdb.New(subnetPrefix, db),
 		vmDB:             prefixdb.New(vmPrefix, db),
 		installedVMs:     prefixdb.New(installedVMsPrefix, db),
+		auth:             config.Auth,
 	}
 
 	if err := os.MkdirAll(s.repositoriesPath, perms.ReadWriteExecute); err != nil {
@@ -448,6 +448,48 @@ func (a *APM) repositoryMetadataFor(alias []byte) (*repository.Metadata, error) 
 	return repositoryMetadata, nil
 }
 
+func (a *APM) syncRepository(url string, path string, reference plumbing.ReferenceName) (*git.Repository, error) {
+	var gitRepository *git.Repository
+	if _, err := os.Stat(path); err == nil {
+		// already exists, we need to check out the latest changes
+		gitRepository, err = git.PlainOpen(path)
+		if err != nil {
+			return nil, err
+		}
+		worktree, err := gitRepository.Worktree()
+		if err != nil {
+			return nil, err
+		}
+		err = worktree.Pull(
+			//TODO use fetch + checkout instead of pull
+			&git.PullOptions{
+				RemoteName:    "origin",
+				ReferenceName: reference,
+				SingleBranch:  true,
+				Auth:          a.auth,
+				Progress:      ioutil.Discard,
+			},
+		)
+	} else if os.IsNotExist(err) {
+		// otherwise, we need to clone the repository
+		gitRepository, err = git.PlainClone(path, false, &git.CloneOptions{
+			URL:           url,
+			ReferenceName: reference,
+			SingleBranch:  true,
+			Auth:          a.auth,
+			Progress:      ioutil.Discard,
+		})
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, err
+	}
+
+	return gitRepository, nil
+}
+
 type Config struct {
 	WorkingDir string
+	Auth       *http.BasicAuth
 }
