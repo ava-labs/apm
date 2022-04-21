@@ -1,4 +1,4 @@
-package cmd
+package apm
 
 import (
 	"errors"
@@ -42,7 +42,6 @@ var (
 
 	auth = &http.BasicAuth{
 		Username: "personal access token",
-		//TODO accept token through cli
 		Password: "<YOUR PERSONAL ACCESS TOKEN HERE>",
 	}
 )
@@ -59,13 +58,13 @@ type APM struct {
 	installedVMs database.Database
 }
 
-func (apm *APM) Install(alias string) error {
+func (a *APM) Install(alias string) error {
 	if parsed := strings.Split(alias, ":"); len(parsed) > 1 {
 		// this is a full name
-		return apm.install(alias)
+		return a.install(alias)
 	}
 
-	bytes, err := apm.vmDB.Get([]byte(alias))
+	bytes, err := a.vmDB.Get([]byte(alias))
 	if err == database.ErrNotFound {
 		fmt.Printf("vm %s not found.\n", alias)
 	}
@@ -83,13 +82,13 @@ func (apm *APM) Install(alias string) error {
 	}
 
 	fullName := fmt.Sprintf("%s:%s", registry.Repositories[0], alias)
-	return apm.install(fullName)
+	return a.install(fullName)
 }
 
-func (apm *APM) install(name string) error {
+func (a *APM) install(name string) error {
 	nameBytes := []byte(name)
 
-	ok, err := apm.installedVMs.Has(nameBytes)
+	ok, err := a.installedVMs.Has(nameBytes)
 	if err != nil {
 		return err
 	}
@@ -102,7 +101,7 @@ func (apm *APM) install(name string) error {
 	alias, plugin := parseQualifiedName(name)
 	organization, repo := parseAlias(alias)
 
-	repoDB := prefixdb.New([]byte(alias), apm.db)
+	repoDB := prefixdb.New([]byte(alias), a.db)
 	repoVMDB := prefixdb.New(vmPrefix, repoDB)
 
 	bytes, err := repoVMDB.Get([]byte(plugin))
@@ -117,7 +116,7 @@ func (apm *APM) install(name string) error {
 
 	vm := record.Plugin
 	archiveFile := fmt.Sprintf("%s.tar.gz", plugin)
-	tmpPath := filepath.Join(apm.tmpPath, organization, repo)
+	tmpPath := filepath.Join(a.tmpPath, organization, repo)
 	downloadPath := filepath.Join(tmpPath, archiveFile)
 
 	if vm.InstallScript == "" {
@@ -201,7 +200,7 @@ Loop:
 	if err != nil {
 		return err
 	}
-	if err := apm.installedVMs.Put(nameBytes, installedVersion); err != nil {
+	if err := a.installedVMs.Put(nameBytes, installedVersion); err != nil {
 		return err
 	}
 
@@ -209,36 +208,36 @@ Loop:
 	return nil
 }
 
-func (apm *APM) Uninstall(alias string) error {
+func (a *APM) Uninstall(alias string) error {
 	return nil
 }
 
-func (apm *APM) Join(alias string) error {
+func (a *APM) Join(alias string) error {
 	return nil
 }
 
-func (apm *APM) Upgrade(alias string) error {
+func (a *APM) Upgrade(alias string) error {
 	return nil
 }
 
-func (apm *APM) Search(alias string) error {
+func (a *APM) Search(alias string) error {
 	return nil
 }
 
-func (apm *APM) Info(alias string) error {
+func (a *APM) Info(alias string) error {
 	return nil
 }
 
-func (apm *APM) Update() error {
-	itr := apm.repositoryDB.NewIterator()
+func (a *APM) Update() error {
+	itr := a.repositoryDB.NewIterator()
 
 	for itr.Next() {
 		// Need to split the alias to support Windows
 		aliasBytes := itr.Key()
 		organization, repo := parseAlias(string(aliasBytes))
 
-		repositoryMetadata, err := apm.repositoryMetadataFor(aliasBytes)
-		repositoryPath := filepath.Join(apm.repositoriesPath, organization, repo)
+		repositoryMetadata, err := a.repositoryMetadataFor(aliasBytes)
+		repositoryPath := filepath.Join(a.repositoriesPath, organization, repo)
 		gitRepository, err := syncRepository(repositoryMetadata.URL, repositoryPath, "refs/heads/main")
 
 		head, err := gitRepository.Head()
@@ -260,17 +259,17 @@ func (apm *APM) Update() error {
 			continue
 		}
 
-		repoDB := prefixdb.New(aliasBytes, apm.db)
+		repoDB := prefixdb.New(aliasBytes, a.db)
 
 		vmsPath := filepath.Join(repositoryPath, vms)
 		repoVMs := prefixdb.New(vmPrefix, repoDB)
-		if err := loadFromYAML[*types.VM](vmKey, vmsPath, aliasBytes, latestCommit, apm.vmDB, repoVMs); err != nil {
+		if err := loadFromYAML[*types.VM](vmKey, vmsPath, aliasBytes, latestCommit, a.vmDB, repoVMs); err != nil {
 			return err
 		}
 
 		subnetsPath := filepath.Join(repositoryPath, subnets)
 		repoSubnets := prefixdb.New(subnetPrefix, repoDB)
-		if err := loadFromYAML[*types.Subnet](subnetKey, subnetsPath, aliasBytes, latestCommit, apm.subnetDB, repoSubnets); err != nil {
+		if err := loadFromYAML[*types.Subnet](subnetKey, subnetsPath, aliasBytes, latestCommit, a.subnetDB, repoSubnets); err != nil {
 			return err
 		}
 
@@ -292,7 +291,7 @@ func (apm *APM) Update() error {
 			return err
 		}
 
-		if err := apm.repositoryDB.Put(aliasBytes, updatedMetadataBytes); err != nil {
+		if err := a.repositoryDB.Put(aliasBytes, updatedMetadataBytes); err != nil {
 			return err
 		}
 
@@ -330,7 +329,7 @@ func deleteStalePlugins[T types.Plugin](db database.Database, latestCommit plumb
 	return nil
 }
 
-func (apm *APM) AddRepository(alias string, url string) error {
+func (a *APM) AddRepository(alias string, url string) error {
 	//TODO should be idempotent
 	metadata := repository.Metadata{
 		Alias:  alias,
@@ -341,12 +340,12 @@ func (apm *APM) AddRepository(alias string, url string) error {
 	if err != nil {
 		return err
 	}
-	return apm.repositoryDB.Put([]byte(alias), metadataBytes)
+	return a.repositoryDB.Put([]byte(alias), metadataBytes)
 }
 
-func (apm *APM) RemoveRepository(alias string) error {
+func (a *APM) RemoveRepository(alias string) error {
 	aliasBytes := []byte(alias)
-	repoDB := prefixdb.New(aliasBytes, apm.db)
+	repoDB := prefixdb.New(aliasBytes, a.db)
 	itr := repoDB.NewIterator()
 
 	// delete all the plugin definitions in the repository
@@ -358,11 +357,11 @@ func (apm *APM) RemoveRepository(alias string) error {
 	//TODO remove from subnets + vms
 
 	// remove it from our list of tracked repositories
-	return apm.repositoryDB.Delete(aliasBytes)
+	return a.repositoryDB.Delete(aliasBytes)
 }
 
-func (apm *APM) ListRepositories() error {
-	itr := apm.repositoryDB.NewIterator()
+func (a *APM) ListRepositories() error {
+	itr := a.repositoryDB.NewIterator()
 
 	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
 	fmt.Fprintln(w, "alias\turl")
@@ -425,8 +424,8 @@ func New(config Config) (*APM, error) {
 	return s, nil
 }
 
-func (apm *APM) repositoryMetadataFor(alias []byte) (*repository.Metadata, error) {
-	repositoryMetadataBytes, err := apm.repositoryDB.Get(alias)
+func (a *APM) repositoryMetadataFor(alias []byte) (*repository.Metadata, error) {
+	repositoryMetadataBytes, err := a.repositoryDB.Get(alias)
 	if err != nil && err != database.ErrNotFound {
 		return nil, err
 	}

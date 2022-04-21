@@ -1,4 +1,4 @@
-package cmd
+package apm
 
 import (
 	"io/ioutil"
