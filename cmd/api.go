@@ -31,7 +31,7 @@ import (
 var (
 	dbDir        = "db"
 	repositories = "repositories"
-	plugins      = "plugins"
+	tmp          = "tmp"
 	subnets      = "subnets"
 	vms          = "vms"
 
@@ -48,13 +48,13 @@ var (
 	auth = &http.BasicAuth{
 		Username: "personal access token",
 		//TODO accept token through cli
-		//Password: "<YOUR PERSONAL ACCESS TOKEN HERE>",
+		Password: "<YOUR PERSONAL ACCESS TOKEN HERE>",
 	}
 )
 
 type APM struct {
 	repositoriesPath string
-	pluginsPath      string
+	tmpPath          string
 
 	codecManager codec.Manager
 
@@ -124,8 +124,8 @@ func (apm *APM) install(name string) error {
 
 	vm := record.Plugin
 	archiveFile := fmt.Sprintf("%s.tar.gz", plugin)
-	pluginPath := filepath.Join(apm.pluginsPath, organization, repo)
-	downloadPath := filepath.Join(pluginPath, archiveFile)
+	tmpPath := filepath.Join(apm.tmpPath, organization, repo)
+	downloadPath := filepath.Join(tmpPath, archiveFile)
 
 	if vm.InstallScript == "" {
 		fmt.Printf("No install script found for %s.", name)
@@ -169,7 +169,7 @@ Loop:
 	if _, err := os.Stat(plugin); errors.Is(err, os.ErrNotExist) {
 		fmt.Printf("Creating sources directory...\n")
 		cmd := exec.Command("mkdir", plugin)
-		cmd.Dir = pluginPath
+		cmd.Dir = tmpPath
 
 		if err := cmd.Run(); err != nil {
 			return err
@@ -178,12 +178,12 @@ Loop:
 
 	fmt.Printf("Uncompressing %s...\n", name)
 	cmd := exec.Command("tar", "xf", archiveFile, "-C", plugin, "--strip-components", "1")
-	cmd.Dir = pluginPath
+	cmd.Dir = tmpPath
 	if err := cmd.Run(); err != nil {
 		return err
 	}
 
-	workingDir := filepath.Join(pluginPath, plugin)
+	workingDir := filepath.Join(tmpPath, plugin)
 	fmt.Printf("Running install script...\n")
 	cmd = exec.Command(vm.InstallScript)
 	cmd.Stdout = os.Stdout
@@ -194,12 +194,12 @@ Loop:
 	}
 
 	fmt.Printf("Cleaning up temporary files...\n")
-	if err := os.Remove(filepath.Join(pluginPath, archiveFile)); err != nil {
+	if err := os.Remove(filepath.Join(tmpPath, archiveFile)); err != nil {
 		panic(err)
 		return err
 	}
 
-	if err := os.RemoveAll(filepath.Join(pluginPath, plugin)); err != nil {
+	if err := os.RemoveAll(filepath.Join(tmpPath, plugin)); err != nil {
 		panic(err)
 		return err
 	}
@@ -411,7 +411,7 @@ func New(config Config) (*APM, error) {
 	s := &APM{
 		codecManager:     codecManager,
 		repositoriesPath: filepath.Join(config.WorkingDir, repositories),
-		pluginsPath:      filepath.Join(config.WorkingDir, plugins),
+		tmpPath:          filepath.Join(config.WorkingDir, tmp),
 		db:               db,
 		repositoryDB:     prefixdb.New(repoPrefix, db),
 		subnetDB:         prefixdb.New(subnetPrefix, db),
