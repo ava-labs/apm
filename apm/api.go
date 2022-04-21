@@ -59,30 +59,39 @@ type APM struct {
 	auth *http.BasicAuth
 }
 
-func (a *APM) Install(alias string) error {
-	if parsed := strings.Split(alias, ":"); len(parsed) > 1 {
-		// this is a full name
-		return a.install(alias)
-	}
+func qualifiedName(name string) bool {
+	parsed := strings.Split(name, ":")
+	return len(parsed) > 1
+}
 
-	bytes, err := a.vmDB.Get([]byte(alias))
-	if err == database.ErrNotFound {
-		fmt.Printf("vm %s not found.\n", alias)
-	}
+func getFullNameForAlias[T types.Plugin](db database.Database, alias string) (string, error) {
+	bytes, err := db.Get([]byte(alias))
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	registry := &repository.Registry{}
 	if err := yaml.Unmarshal(bytes, registry); err != nil {
-		return err
+		return "", err
 	}
 
 	if len(registry.Repositories) > 1 {
-		fmt.Printf("more than one match found for %s. Please specify the fully qualified name. Matches: %s.\n", alias, registry.Repositories)
+		return "", errors.New(fmt.Sprintf("more than one match found for %s. Please specify the fully qualified name. Matches: %s.\n", alias, registry.Repositories))
 	}
 
-	fullName := fmt.Sprintf("%s:%s", registry.Repositories[0], alias)
+	return fmt.Sprintf("%s:%s", registry.Repositories[0], alias), nil
+}
+
+func (a *APM) Install(alias string) error {
+	if qualifiedName(alias) {
+		return a.install(alias)
+	}
+
+	fullName, err := getFullNameForAlias[*types.VM](a.vmDB, alias)
+	if err != nil {
+		return err
+	}
+
 	return a.install(fullName)
 }
 
@@ -221,6 +230,42 @@ func (a *APM) Uninstall(alias string) error {
 }
 
 func (a *APM) Join(alias string) error {
+	if qualifiedName(alias) {
+		return a.join(alias)
+	}
+
+	fullName, err := getFullNameForAlias[*types.Subnet](a.subnetDB, alias)
+	if err != nil {
+		return err
+	}
+
+	return a.join(fullName)
+}
+
+func (a *APM) join(fullName string) error {
+	alias, plugin := parseQualifiedName(fullName)
+	aliasBytes := []byte(alias)
+	repoDB := prefixdb.New(aliasBytes, a.db)
+	repoSubnetDB := prefixdb.New(subnetPrefix, repoDB)
+
+	subnetBytes, err := repoSubnetDB.Get([]byte(plugin))
+	if err != nil {
+		return err
+	}
+
+	subnet := &types.Subnet{}
+	if err := yaml.Unmarshal(subnetBytes, subnet); err != nil {
+		return err
+	}
+
+	fmt.Printf("Installing virtual machines for subnet %s.\n", subnet.ID_)
+	for _, vm := range subnet.VMs_ {
+		if err := a.Install(vm); err != nil {
+			return err
+		}
+	}
+
+	fmt.Printf("Finished installing virtual machines for subnet %s.\n", subnet.ID_)
 	return nil
 }
 
@@ -270,22 +315,22 @@ func (a *APM) Update() error {
 		repoDB := prefixdb.New(aliasBytes, a.db)
 
 		vmsPath := filepath.Join(repositoryPath, vms)
-		repoVMs := prefixdb.New(vmPrefix, repoDB)
-		if err := loadFromYAML[*types.VM](vmKey, vmsPath, aliasBytes, latestCommit, a.vmDB, repoVMs); err != nil {
+		repoVMDB := prefixdb.New(vmPrefix, repoDB)
+		if err := loadFromYAML[*types.VM](vmKey, vmsPath, aliasBytes, latestCommit, a.vmDB, repoVMDB); err != nil {
 			return err
 		}
 
 		subnetsPath := filepath.Join(repositoryPath, subnets)
-		repoSubnets := prefixdb.New(subnetPrefix, repoDB)
-		if err := loadFromYAML[*types.Subnet](subnetKey, subnetsPath, aliasBytes, latestCommit, a.subnetDB, repoSubnets); err != nil {
+		repoSubnetDB := prefixdb.New(subnetPrefix, repoDB)
+		if err := loadFromYAML[*types.Subnet](subnetKey, subnetsPath, aliasBytes, latestCommit, a.subnetDB, repoSubnetDB); err != nil {
 			return err
 		}
 
 		// Now we need to delete anything that wasn't updated in the latest commit
-		if err := deleteStalePlugins[*types.VM](repoVMs, latestCommit); err != nil {
+		if err := deleteStalePlugins[*types.VM](repoVMDB, latestCommit); err != nil {
 			return err
 		}
-		if err := deleteStalePlugins[*types.Subnet](repoSubnets, latestCommit); err != nil {
+		if err := deleteStalePlugins[*types.Subnet](repoSubnetDB, latestCommit); err != nil {
 			return err
 		}
 

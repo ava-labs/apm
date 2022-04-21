@@ -108,7 +108,7 @@ func loadFromYAML[T types.Plugin](
 			return err
 		}
 
-		fmt.Printf("Updated plugin %s@%s.\n", alias, commit)
+		fmt.Printf("Updated plugin definition in registry for %s:%s@%s.\n", repositoryAlias, alias, commit)
 	}
 
 	if err := globalBatch.Write(); err != nil {

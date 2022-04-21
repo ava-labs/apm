@@ -14,13 +14,20 @@ import (
 
 var (
 	homeDir    = os.ExpandEnv("$HOME")
-	password   = os.ExpandEnv("$AUTH_TOKEN")
 	workingDir = filepath.Join(homeDir, fmt.Sprintf(".%s", constant.AppName))
+
+	authToken = &http.BasicAuth{
+		Username: "personal access token",
+		Password: os.ExpandEnv("$AUTH_TOKEN"),
+	}
 
 	rootCmd *cobra.Command
 
 	// arguments
+	// install
 	vmAlias string
+	// join
+	subnetAlias string
 )
 
 func init() {
@@ -33,6 +40,7 @@ func init() {
 	rootCmd.AddCommand(
 		Install(),
 		ListRepositories(),
+		Join(),
 	)
 }
 
@@ -49,14 +57,9 @@ func Install() *cobra.Command {
 
 	install := func(_ *cobra.Command, _ []string) error {
 
-		authToken := http.BasicAuth{
-			Username: "personal access token",
-			Password: password,
-		}
-
 		apm, err := apm.New(apm.Config{
 			WorkingDir: workingDir,
-			Auth:       &authToken,
+			Auth:       authToken,
 		})
 		if err != nil {
 			return err
@@ -75,14 +78,9 @@ func ListRepositories() *cobra.Command {
 	}
 
 	listRepositories := func(_ *cobra.Command, _ []string) error {
-		authToken := http.BasicAuth{
-			Username: "personal access token",
-			Password: password,
-		}
-
 		apm, err := apm.New(apm.Config{
 			WorkingDir: workingDir,
-			Auth:       &authToken,
+			Auth:       authToken,
 		})
 		if err != nil {
 			return err
@@ -92,5 +90,28 @@ func ListRepositories() *cobra.Command {
 	}
 
 	command.RunE = listRepositories
+	return command
+}
+
+func Join() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "join",
+		Short: "join a subnet by its alias.",
+	}
+	command.PersistentFlags().StringVar(&subnetAlias, "subnet-alias", "", "subnet alias to join")
+
+	join := func(_ *cobra.Command, _ []string) error {
+		apm, err := apm.New(apm.Config{
+			WorkingDir: workingDir,
+			Auth:       authToken,
+		})
+		if err != nil {
+			return err
+		}
+
+		return apm.Join(subnetAlias)
+	}
+
+	command.RunE = join
 	return command
 }
