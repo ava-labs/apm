@@ -1,9 +1,10 @@
-package api
+package cmd
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -12,6 +13,23 @@ import (
 	"github.com/ava-labs/apm/repository"
 	"github.com/ava-labs/apm/types"
 )
+
+const (
+	qualifiedNameDelimiter = ":"
+	aliasDelimiter         = "/"
+)
+
+func parseQualifiedName(name string) (source string, plugin string) {
+	parsed := strings.Split(name, qualifiedNameDelimiter)
+
+	return parsed[0], parsed[1]
+}
+
+func parseAlias(alias string) (organization string, repository string) {
+	parsed := strings.Split(alias, aliasDelimiter)
+
+	return parsed[0], parsed[1]
+}
 
 func loadFromYAML[T types.Plugin](
 	key string,
