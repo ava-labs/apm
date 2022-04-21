@@ -10,14 +10,11 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/ava-labs/avalanchego/codec"
-	"github.com/ava-labs/avalanchego/codec/linearcodec"
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/leveldb"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/perms"
-	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/cavaliergopher/grab/v3"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
@@ -43,8 +40,6 @@ var (
 	vmKey     = "vm"
 	subnetKey = "subnet"
 
-	codecVersion uint16 = 1
-
 	auth = &http.BasicAuth{
 		Username: "personal access token",
 		//TODO accept token through cli
@@ -55,8 +50,6 @@ var (
 type APM struct {
 	repositoriesPath string
 	tmpPath          string
-
-	codecManager codec.Manager
 
 	db           database.Database
 	repositoryDB database.Database
@@ -392,24 +385,7 @@ func New(config Config) (*APM, error) {
 		return nil, err
 	}
 
-	// initialize codec
-	c := linearcodec.NewDefault()
-	errs := wrappers.Errs{}
-	//errs.Add(
-	//	c.RegisterType(&grpc.Subnet{}),
-	//	c.RegisterType(&grpc.VM{}),
-	//)
-	if errs.Errored() {
-		return nil, errs.Err
-	}
-
-	codecManager := codec.NewDefaultManager()
-	if err := codecManager.RegisterCodec(codecVersion, c); err != nil {
-		return nil, err
-	}
-
 	s := &APM{
-		codecManager:     codecManager,
 		repositoriesPath: filepath.Join(config.WorkingDir, repositories),
 		tmpPath:          filepath.Join(config.WorkingDir, tmp),
 		db:               db,
