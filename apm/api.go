@@ -64,7 +64,7 @@ func qualifiedName(name string) bool {
 	return len(parsed) > 1
 }
 
-func getFullNameForAlias[T types.Plugin](db database.Database, alias string) (string, error) {
+func getFullNameForAlias(db database.Database, alias string) (string, error) {
 	bytes, err := db.Get([]byte(alias))
 	if err != nil {
 		return "", err
@@ -87,7 +87,7 @@ func (a *APM) Install(alias string) error {
 		return a.install(alias)
 	}
 
-	fullName, err := getFullNameForAlias[*types.VM](a.vmDB, alias)
+	fullName, err := getFullNameForAlias(a.vmDB, alias)
 	if err != nil {
 		return err
 	}
