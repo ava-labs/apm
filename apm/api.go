@@ -229,12 +229,12 @@ func (a *APM) Uninstall(alias string) error {
 	return nil
 }
 
-func (a *APM) Join(alias string) error {
+func (a *APM) JoinSubnet(alias string) error {
 	if qualifiedName(alias) {
 		return a.join(alias)
 	}
 
-	fullName, err := getFullNameForAlias[*types.Subnet](a.subnetDB, alias)
+	fullName, err := getFullNameForAlias(a.subnetDB, alias)
 	if err != nil {
 		return err
 	}
@@ -434,15 +434,15 @@ func (a *APM) ListRepositories() error {
 }
 
 func New(config Config) (*APM, error) {
-	dbDir := filepath.Join(config.WorkingDir, dbDir)
+	dbDir := filepath.Join(config.Directory, dbDir)
 	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{})
 	if err != nil {
 		return nil, err
 	}
 
 	s := &APM{
-		repositoriesPath: filepath.Join(config.WorkingDir, repositories),
-		tmpPath:          filepath.Join(config.WorkingDir, tmp),
+		repositoriesPath: filepath.Join(config.Directory, repositories),
+		tmpPath:          filepath.Join(config.Directory, tmp),
 		db:               db,
 		repositoryDB:     prefixdb.New(repoPrefix, db),
 		subnetDB:         prefixdb.New(subnetPrefix, db),
@@ -537,6 +537,6 @@ func (a *APM) syncRepository(url string, path string, reference plumbing.Referen
 }
 
 type Config struct {
-	WorkingDir string
-	Auth       *http.BasicAuth
+	Directory string
+	Auth      *http.BasicAuth
 }

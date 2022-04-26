@@ -1,35 +1,21 @@
 package main
 
-import "github.com/ava-labs/apm/cmd"
+import (
+	"fmt"
+	"os"
+
+	"github.com/ava-labs/apm/cmd"
+)
 
 func main() {
-	//var err error
-	//
-	//fmt.Println("-----------------------------------------------")
-	//fmt.Println("Bootstrap:")
-	//cmd, err := cmd.New(
-	//	cmd.Config{
-	//		WorkingDir: workingDir,
-	//	},
-	//)
-	//fmt.Println("-----------------------------------------------")
-	//fmt.Println("Update:")
-	//cmd.Update()
-	//fmt.Println("-----------------------------------------------")
-	//fmt.Println("ListRepositories:")
-	//cmd.ListRepositories()
-	//fmt.Println("-----------------------------------------------")
-	//fmt.Println("Install:")
-	//cmd.Install("spacesvm")
-	//fmt.Println("-----------------------------------------------")
-	//fmt.Println("Install Again:")
-	//cmd.Install("spacesvm")
-	//fmt.Println("-----------------------------------------------")
-	//
-	//if err != nil {
-	//	fmt.Printf("unexpected error: %s\n", err)
-	//}
-	if err := cmd.Run(); err != nil {
-		panic(err)
+	apm, err := cmd.New()
+	if err != nil {
+		fmt.Printf("Failed to initialize the apm command %s.\n", err)
+		os.Exit(1)
+	}
+
+	if err := apm.Execute(); err != nil {
+		fmt.Printf("Unexpected error %s.\n", err)
+		os.Exit(1)
 	}
 }
