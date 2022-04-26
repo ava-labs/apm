@@ -9,7 +9,9 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
 
+	"github.com/ava-labs/apm/config"
 	"github.com/ava-labs/apm/constant"
 )
 
@@ -18,7 +20,7 @@ var (
 	apmDir  = filepath.Join(homeDir, fmt.Sprintf(".%s", constant.AppName))
 	goPath  = os.ExpandEnv("$GOPATH")
 
-	authToken *http.BasicAuth
+	authToken = http.BasicAuth{}
 )
 
 const (
@@ -43,7 +45,6 @@ func New() (*cobra.Command, error) {
 	rootCmd.PersistentFlags().String(AdminApiEndpoint, "127.0.0.1:9650/ext/admin", "endpoint for the avalanche admin api")
 
 	errs := wrappers.Errs{}
-
 	errs.Add(
 		viper.BindPFlag(ConfigFileKey, rootCmd.PersistentFlags().Lookup(ConfigFileKey)),
 		viper.BindPFlag(ApmPathKey, rootCmd.PersistentFlags().Lookup(ApmPathKey)),
@@ -51,6 +52,26 @@ func New() (*cobra.Command, error) {
 		viper.BindPFlag(CredentialsFileKey, rootCmd.PersistentFlags().Lookup(CredentialsFileKey)),
 		viper.BindPFlag(AdminApiEndpoint, rootCmd.PersistentFlags().Lookup(AdminApiEndpoint)),
 	)
+	if errs.Errored() {
+		return nil, errs.Err
+	}
+
+	fmt.Printf(
+		"config[%s] apm[%s] plugin[%s] credentials[%s] admin[%s]\n",
+		viper.GetString(ConfigFileKey),
+		viper.GetString(ApmPathKey),
+		viper.GetString(PluginPathKey),
+		viper.GetString(CredentialsFileKey),
+		viper.GetString(AdminApiEndpoint),
+	)
+
+	rootCmd.AddCommand(
+		install(),
+		listRepositories(),
+		joinSubnet(),
+	)
+
+	os.Exit(2)
 
 	if viper.IsSet(ConfigFileKey) {
 		cfgFile := os.ExpandEnv(viper.GetString(ConfigFileKey))
@@ -61,11 +82,25 @@ func New() (*cobra.Command, error) {
 		}
 	}
 
-	rootCmd.AddCommand(
-		install(),
-		listRepositories(),
-		joinSubnet(),
-	)
+	fmt.Printf("credentials file: %s\n", viper.GetString(CredentialsFileKey))
+
+	// If we need to use custom git credentials (say for private repos).
+	if viper.IsSet(CredentialsFileKey) {
+		credentials := &config.Credential{}
+
+		bytes, err := os.ReadFile(viper.GetString(CredentialsFileKey))
+		if err != nil {
+			return nil, err
+		}
+		if err := yaml.Unmarshal(bytes, credentials); err != nil {
+			return nil, err
+		}
+
+		authToken = http.BasicAuth{
+			Username: "personal access token",
+			Password: credentials.Password,
+		}
+	}
 
 	return rootCmd, nil
 }

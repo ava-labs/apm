@@ -56,7 +56,7 @@ type APM struct {
 
 	installedVMs database.Database
 
-	auth *http.BasicAuth
+	auth http.BasicAuth
 }
 
 func qualifiedName(name string) bool {
@@ -513,7 +513,7 @@ func (a *APM) syncRepository(url string, path string, reference plumbing.Referen
 				RemoteName:    "origin",
 				ReferenceName: reference,
 				SingleBranch:  true,
-				Auth:          a.auth,
+				Auth:          &a.auth,
 				Progress:      ioutil.Discard,
 			},
 		)
@@ -523,7 +523,7 @@ func (a *APM) syncRepository(url string, path string, reference plumbing.Referen
 			URL:           url,
 			ReferenceName: reference,
 			SingleBranch:  true,
-			Auth:          a.auth,
+			Auth:          &a.auth,
 			Progress:      ioutil.Discard,
 		})
 		if err != nil {
@@ -538,5 +538,5 @@ func (a *APM) syncRepository(url string, path string, reference plumbing.Referen
 
 type Config struct {
 	Directory string
-	Auth      *http.BasicAuth
+	Auth      http.BasicAuth
 }
