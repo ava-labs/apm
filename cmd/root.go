@@ -19,8 +19,6 @@ var (
 	homeDir = os.ExpandEnv("$HOME")
 	apmDir  = filepath.Join(homeDir, fmt.Sprintf(".%s", constant.AppName))
 	goPath  = os.ExpandEnv("$GOPATH")
-
-	authToken = http.BasicAuth{}
 )
 
 const (
@@ -32,10 +30,15 @@ const (
 )
 
 func New() (*cobra.Command, error) {
-	cobra.EnablePrefixMatching = true
 	rootCmd := &cobra.Command{
 		Use:   "apm",
 		Short: "apm is a plugin manager to help manage virtual machines and subnets",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// we need to initialize our config here before each command starts,
+			// since Cobra doesn't actually parse any of the flags until
+			// cobra.Execute() is called.
+			return initializeConfig()
+		},
 	}
 
 	rootCmd.PersistentFlags().String(ConfigFileKey, "", "path to configuration file for the apm")
@@ -56,51 +59,48 @@ func New() (*cobra.Command, error) {
 		return nil, errs.Err
 	}
 
-	fmt.Printf(
-		"config[%s] apm[%s] plugin[%s] credentials[%s] admin[%s]\n",
-		viper.GetString(ConfigFileKey),
-		viper.GetString(ApmPathKey),
-		viper.GetString(PluginPathKey),
-		viper.GetString(CredentialsFileKey),
-		viper.GetString(AdminApiEndpoint),
-	)
-
 	rootCmd.AddCommand(
 		install(),
 		listRepositories(),
 		joinSubnet(),
 	)
 
-	os.Exit(2)
+	fmt.Printf("credentials file: %s\n", viper.GetString(CredentialsFileKey))
 
+	return rootCmd, nil
+}
+
+// initializes config from file, if available.
+func initializeConfig() error {
 	if viper.IsSet(ConfigFileKey) {
 		cfgFile := os.ExpandEnv(viper.GetString(ConfigFileKey))
 		viper.SetConfigFile(cfgFile)
 
-		if err := viper.ReadInConfig(); err != nil {
-			return nil, err
-		}
+		return viper.ReadInConfig()
 	}
 
-	fmt.Printf("credentials file: %s\n", viper.GetString(CredentialsFileKey))
+	return nil
+}
 
-	// If we need to use custom git credentials (say for private repos).
+// If we need to use custom git credentials (say for private repos).
+// nil credentials is safe to use.
+func getCredentials() (http.BasicAuth, error) {
+	result := http.BasicAuth{}
+
 	if viper.IsSet(CredentialsFileKey) {
 		credentials := &config.Credential{}
 
 		bytes, err := os.ReadFile(viper.GetString(CredentialsFileKey))
 		if err != nil {
-			return nil, err
+			return result, err
 		}
 		if err := yaml.Unmarshal(bytes, credentials); err != nil {
-			return nil, err
+			return result, err
 		}
 
-		authToken = http.BasicAuth{
-			Username: "personal access token",
-			Password: credentials.Password,
-		}
+		result.Username = credentials.Username
+		result.Password = credentials.Password
 	}
 
-	return rootCmd, nil
+	return result, nil
 }
