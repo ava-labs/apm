@@ -1,9 +1,11 @@
 package apm
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,7 +21,7 @@ import (
 	"github.com/cavaliergopher/grab/v3"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	gitHttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"gopkg.in/yaml.v2"
 
 	"github.com/ava-labs/apm/repository"
@@ -41,13 +43,13 @@ var (
 
 	vmKey     = "vm"
 	subnetKey = "subnet"
-
-	pluginDir = filepath.Join(os.ExpandEnv("$GOPATH"), "src", "github.com", "ava-labs", "avalanchego", "build", "plugins")
 )
 
 type APM struct {
 	repositoriesPath string
 	tmpPath          string
+	pluginPath       string
+	adminApiEndpoint string
 
 	db           database.Database
 	repositoryDB database.Database
@@ -56,7 +58,7 @@ type APM struct {
 
 	installedVMs database.Database
 
-	auth http.BasicAuth
+	auth gitHttp.BasicAuth
 }
 
 func qualifiedName(name string) bool {
@@ -196,7 +198,7 @@ Loop:
 	}
 
 	fmt.Printf("Moving binary %s into plugin directory...\n", vm.ID_)
-	if err := os.Rename(filepath.Join(workingDir, vm.BinaryPath), filepath.Join(pluginDir, vm.ID_)); err != nil {
+	if err := os.Rename(filepath.Join(workingDir, vm.BinaryPath), filepath.Join(a.pluginDir, vm.ID_)); err != nil {
 		panic(err)
 		return err
 	}
@@ -231,7 +233,7 @@ func (a *APM) Uninstall(alias string) error {
 
 func (a *APM) JoinSubnet(alias string) error {
 	if qualifiedName(alias) {
-		return a.join(alias)
+		return a.joinSubnet(alias)
 	}
 
 	fullName, err := getFullNameForAlias(a.subnetDB, alias)
@@ -239,10 +241,10 @@ func (a *APM) JoinSubnet(alias string) error {
 		return err
 	}
 
-	return a.join(fullName)
+	return a.joinSubnet(fullName)
 }
 
-func (a *APM) join(fullName string) error {
+func (a *APM) joinSubnet(fullName string) error {
 	alias, plugin := parseQualifiedName(fullName)
 	aliasBytes := []byte(alias)
 	repoDB := prefixdb.New(aliasBytes, a.db)
@@ -265,6 +267,40 @@ func (a *APM) join(fullName string) error {
 		if err := a.Install(vm); err != nil {
 			return err
 		}
+	}
+
+	//TODO retry strategy
+	fmt.Printf("Whitelisting subnet %s...\n", subnet.ID())
+	body := []byte(
+		fmt.Sprintf(
+			`{
+				"jsonrpc":"2.0",
+				"id"     :1,
+				"method" :"admin.whitelistSubnet",
+				"params": {
+					"subnetID":"%sasdfasdf"
+				}
+			}`,
+			subnet.ID(),
+		),
+	)
+
+	r, err := http.NewRequest("POST", a.adminApiEndpoint, bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	r.Header.Add("content-type", "application/json")
+
+	client := &http.Client{}
+	res, err := client.Do(r)
+	if err != nil {
+		return err
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected response code %s", res.StatusCode)
 	}
 
 	fmt.Printf("Finished installing virtual machines for subnet %s.\n", subnet.ID_)
@@ -443,12 +479,14 @@ func New(config Config) (*APM, error) {
 	s := &APM{
 		repositoriesPath: filepath.Join(config.Directory, repositories),
 		tmpPath:          filepath.Join(config.Directory, tmp),
+		pluginPath:       config.PluginDir,
 		db:               db,
 		repositoryDB:     prefixdb.New(repoPrefix, db),
 		subnetDB:         prefixdb.New(subnetPrefix, db),
 		vmDB:             prefixdb.New(vmPrefix, db),
 		installedVMs:     prefixdb.New(installedVMsPrefix, db),
 		auth:             config.Auth,
+		adminApiEndpoint: fmt.Sprintf("http://%s", config.AdminApiEndpoint),
 	}
 
 	if err := os.MkdirAll(s.repositoriesPath, perms.ReadWriteExecute); err != nil {
@@ -514,7 +552,7 @@ func (a *APM) syncRepository(url string, path string, reference plumbing.Referen
 				ReferenceName: reference,
 				SingleBranch:  true,
 				Auth:          &a.auth,
-				Progress:      ioutil.Discard,
+				Progress:      io.Discard,
 			},
 		)
 	} else if os.IsNotExist(err) {
@@ -524,7 +562,7 @@ func (a *APM) syncRepository(url string, path string, reference plumbing.Referen
 			ReferenceName: reference,
 			SingleBranch:  true,
 			Auth:          &a.auth,
-			Progress:      ioutil.Discard,
+			Progress:      io.Discard,
 		})
 		if err != nil {
 			return nil, err
@@ -537,6 +575,8 @@ func (a *APM) syncRepository(url string, path string, reference plumbing.Referen
 }
 
 type Config struct {
-	Directory string
-	Auth      http.BasicAuth
+	Directory        string
+	Auth             gitHttp.BasicAuth
+	AdminApiEndpoint string
+	PluginDir        string
 }

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/ava-labs/apm/apm"
 )
@@ -21,8 +22,10 @@ func joinSubnet() *cobra.Command {
 			return err
 		}
 		apm, err := apm.New(apm.Config{
-			Directory: apmDir,
-			Auth:      credentials,
+			Directory:        viper.GetString(ApmPathKey),
+			Auth:             credentials,
+			AdminApiEndpoint: viper.GetString(AdminApiEndpoint),
+			PluginDir:        viper.GetString(PluginPathKey),
 		})
 
 		if err != nil {
