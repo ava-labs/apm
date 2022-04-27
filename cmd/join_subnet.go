@@ -11,7 +11,7 @@ func joinSubnet() *cobra.Command {
 	subnetAlias := ""
 
 	command := &cobra.Command{
-		Use:   "join",
+		Use:   "join-subnet",
 		Short: "join a subnet by its alias.",
 	}
 

@@ -10,7 +10,7 @@ import (
 func install() *cobra.Command {
 	vmAlias := ""
 	command := &cobra.Command{
-		Use:   "install",
+		Use:   "install-vm",
 		Short: "installs a virtual machine by its alias",
 	}
 	command.PersistentFlags().StringVar(&vmAlias, "vm-alias", "", "vm alias to install")
