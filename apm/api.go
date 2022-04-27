@@ -198,7 +198,7 @@ Loop:
 	}
 
 	fmt.Printf("Moving binary %s into plugin directory...\n", vm.ID_)
-	if err := os.Rename(filepath.Join(workingDir, vm.BinaryPath), filepath.Join(a.pluginDir, vm.ID_)); err != nil {
+	if err := os.Rename(filepath.Join(workingDir, vm.BinaryPath), filepath.Join(a.pluginPath, vm.ID_)); err != nil {
 		panic(err)
 		return err
 	}
