@@ -316,6 +316,19 @@ func (a *APM) Search(alias string) error {
 }
 
 func (a *APM) Info(alias string) error {
+	if qualifiedName(alias) {
+		return a.install(alias)
+	}
+
+	fullName, err := getFullNameForAlias(a.vmDB, alias)
+	if err != nil {
+		return err
+	}
+
+	return a.info(fullName)
+}
+
+func (a *APM) info(fullName string) error {
 	return nil
 }
 
