@@ -39,18 +39,14 @@ func (c *HttpClient) LoadVMs() error {
 		),
 	)
 
-	request, err := http.NewRequest("POST", c.endpoint, bytes.NewBuffer(body))
-	if err != nil {
-		return err
-	}
-	request.Header.Add("content-type", "application/json")
-
-	err = executeHttpRequest(request)
+	err := c.executeHttpRequest(body)
 	if err != nil && strings.Contains(err.Error(), "connection refused") {
 		// Node is offline case. This is fine, since the node will
 		// automatically register the new vms upon bootstrap.
 		return nil
 	}
+
+	return err
 }
 
 //TODO handle dead node
@@ -69,16 +65,16 @@ func (c *HttpClient) WhitelistSubnet(subnetID string) error {
 		),
 	)
 
+	return c.executeHttpRequest(body)
+}
+
+func (c *HttpClient) executeHttpRequest(body []byte) error {
 	request, err := http.NewRequest("POST", c.endpoint, bytes.NewBuffer(body))
 	if err != nil {
 		return err
 	}
 	request.Header.Add("content-type", "application/json")
 
-	return executeHttpRequest(request)
-}
-
-func executeHttpRequest(request *http.Request) error {
 	client := &http.Client{}
 	res, err := client.Do(request)
 	if err != nil {
