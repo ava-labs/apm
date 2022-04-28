@@ -1,11 +1,9 @@
 package apm
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -24,6 +22,7 @@ import (
 	gitHttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"gopkg.in/yaml.v2"
 
+	"github.com/ava-labs/apm/admin"
 	"github.com/ava-labs/apm/repository"
 	"github.com/ava-labs/apm/types"
 	"github.com/ava-labs/avalanche-plugins-core/core"
@@ -45,11 +44,17 @@ var (
 	subnetKey = "subnet"
 )
 
+type Config struct {
+	Directory        string
+	Auth             gitHttp.BasicAuth
+	AdminApiEndpoint string
+	PluginDir        string
+}
+
 type APM struct {
 	repositoriesPath string
 	tmpPath          string
 	pluginPath       string
-	adminApiEndpoint string
 
 	db           database.Database
 	repositoryDB database.Database
@@ -59,29 +64,62 @@ type APM struct {
 	installedVMs database.Database
 
 	auth gitHttp.BasicAuth
+
+	adminClient admin.Client
 }
 
-func qualifiedName(name string) bool {
-	parsed := strings.Split(name, ":")
-	return len(parsed) > 1
-}
-
-func getFullNameForAlias(db database.Database, alias string) (string, error) {
-	bytes, err := db.Get([]byte(alias))
+func New(config Config) (*APM, error) {
+	dbDir := filepath.Join(config.Directory, dbDir)
+	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	registry := &repository.Registry{}
-	if err := yaml.Unmarshal(bytes, registry); err != nil {
-		return "", err
+	s := &APM{
+		repositoriesPath: filepath.Join(config.Directory, repositories),
+		tmpPath:          filepath.Join(config.Directory, tmp),
+		pluginPath:       config.PluginDir,
+		db:               db,
+		repositoryDB:     prefixdb.New(repoPrefix, db),
+		subnetDB:         prefixdb.New(subnetPrefix, db),
+		vmDB:             prefixdb.New(vmPrefix, db),
+		installedVMs:     prefixdb.New(installedVMsPrefix, db),
+		auth:             config.Auth,
+		adminClient: admin.NewHttpClient(
+			admin.HttpClientConfig{
+				Endpoint: fmt.Sprintf("http://%s", config.AdminApiEndpoint),
+			},
+		),
 	}
 
-	if len(registry.Repositories) > 1 {
-		return "", errors.New(fmt.Sprintf("more than one match found for %s. Please specify the fully qualified name. Matches: %s.\n", alias, registry.Repositories))
+	if err := os.MkdirAll(s.repositoriesPath, perms.ReadWriteExecute); err != nil {
+		return nil, err
 	}
 
-	return fmt.Sprintf("%s:%s", registry.Repositories[0], alias), nil
+	//TODO simplify this
+	coreKey := []byte(core.Alias)
+	if _, err = s.repositoryDB.Get(coreKey); err == database.ErrNotFound {
+		err := s.AddRepository(core.Alias, core.URL)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	repoMetadata, err := s.repositoryMetadataFor(coreKey)
+	if err != nil {
+		return nil, err
+	}
+
+	if repoMetadata.Commit == plumbing.ZeroHash {
+		fmt.Println("Bootstrap not detected. Bootstrapping...")
+		err := s.Update()
+		if err != nil {
+			return nil, err
+		}
+
+		fmt.Println("Finished bootstrapping.")
+	}
+	return s, nil
 }
 
 func (a *APM) Install(alias string) error {
@@ -262,45 +300,21 @@ func (a *APM) joinSubnet(fullName string) error {
 	subnet := record.Plugin
 
 	// TODO prompt user, add force flag
-	fmt.Printf("Installing virtual machines for subnet %s.\n", subnet.ID_)
+	fmt.Printf("Installing virtual machines for subnet %s.\n", subnet.ID())
 	for _, vm := range subnet.VMs_ {
 		if err := a.Install(vm); err != nil {
 			return err
 		}
 	}
 
-	//TODO retry strategy
+	fmt.Printf("Updating virtual machines...\n")
+	if err := a.adminClient.LoadVMs(); err != nil {
+		return err
+	}
+
 	fmt.Printf("Whitelisting subnet %s...\n", subnet.ID())
-	body := []byte(
-		fmt.Sprintf(
-			`{
-				"jsonrpc":"2.0",
-				"id"     :1,
-				"method" :"admin.whitelistSubnet",
-				"params": {
-					"subnetID":"%sasdfasdf"
-				}
-			}`,
-			subnet.ID(),
-		),
-	)
-
-	r, err := http.NewRequest("POST", a.adminApiEndpoint, bytes.NewBuffer(body))
-	if err != nil {
+	if err := a.adminClient.WhitelistSubnet(subnet.ID()); err != nil {
 		return err
-	}
-	r.Header.Add("content-type", "application/json")
-
-	client := &http.Client{}
-	res, err := client.Do(r)
-	if err != nil {
-		return err
-	}
-
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected response code %s", res.StatusCode)
 	}
 
 	fmt.Printf("Finished installing virtual machines for subnet %s.\n", subnet.ID_)
@@ -482,56 +496,6 @@ func (a *APM) ListRepositories() error {
 	return nil
 }
 
-func New(config Config) (*APM, error) {
-	dbDir := filepath.Join(config.Directory, dbDir)
-	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{})
-	if err != nil {
-		return nil, err
-	}
-
-	s := &APM{
-		repositoriesPath: filepath.Join(config.Directory, repositories),
-		tmpPath:          filepath.Join(config.Directory, tmp),
-		pluginPath:       config.PluginDir,
-		db:               db,
-		repositoryDB:     prefixdb.New(repoPrefix, db),
-		subnetDB:         prefixdb.New(subnetPrefix, db),
-		vmDB:             prefixdb.New(vmPrefix, db),
-		installedVMs:     prefixdb.New(installedVMsPrefix, db),
-		auth:             config.Auth,
-		adminApiEndpoint: fmt.Sprintf("http://%s", config.AdminApiEndpoint),
-	}
-
-	if err := os.MkdirAll(s.repositoriesPath, perms.ReadWriteExecute); err != nil {
-		return nil, err
-	}
-
-	//TODO simplify this
-	coreKey := []byte(core.Alias)
-	if _, err = s.repositoryDB.Get(coreKey); err == database.ErrNotFound {
-		err := s.AddRepository(core.Alias, core.URL)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	repoMetadata, err := s.repositoryMetadataFor(coreKey)
-	if err != nil {
-		return nil, err
-	}
-
-	if repoMetadata.Commit == plumbing.ZeroHash {
-		fmt.Println("Bootstrap not detected. Bootstrapping...")
-		err := s.Update()
-		if err != nil {
-			return nil, err
-		}
-
-		fmt.Println("Finished bootstrapping.")
-	}
-	return s, nil
-}
-
 func (a *APM) repositoryMetadataFor(alias []byte) (*repository.Metadata, error) {
 	repositoryMetadataBytes, err := a.repositoryDB.Get(alias)
 	if err != nil && err != database.ErrNotFound {
@@ -587,9 +551,25 @@ func (a *APM) syncRepository(url string, path string, reference plumbing.Referen
 	return gitRepository, nil
 }
 
-type Config struct {
-	Directory        string
-	Auth             gitHttp.BasicAuth
-	AdminApiEndpoint string
-	PluginDir        string
+func qualifiedName(name string) bool {
+	parsed := strings.Split(name, ":")
+	return len(parsed) > 1
+}
+
+func getFullNameForAlias(db database.Database, alias string) (string, error) {
+	bytes, err := db.Get([]byte(alias))
+	if err != nil {
+		return "", err
+	}
+
+	registry := &repository.Registry{}
+	if err := yaml.Unmarshal(bytes, registry); err != nil {
+		return "", err
+	}
+
+	if len(registry.Repositories) > 1 {
+		return "", errors.New(fmt.Sprintf("more than one match found for %s. Please specify the fully qualified name. Matches: %s.\n", alias, registry.Repositories))
+	}
+
+	return fmt.Sprintf("%s:%s", registry.Repositories[0], alias), nil
 }
