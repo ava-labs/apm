@@ -22,11 +22,11 @@ var (
 )
 
 const (
-	ConfigFileKey      = "config-file"
-	ApmPathKey         = "apm-path"
-	PluginPathKey      = "plugin-path"
-	CredentialsFileKey = "credentials-file"
-	AdminApiEndpoint   = "admin-api-endpoint"
+	configFileKey       = "config-file"
+	apmPathKey          = "apm-path"
+	pluginPathKey       = "plugin-path"
+	credentialsFileKey  = "credentials-file"
+	adminApiEndpointKey = "admin-api-endpoint"
 )
 
 func New() (*cobra.Command, error) {
@@ -41,19 +41,19 @@ func New() (*cobra.Command, error) {
 		},
 	}
 
-	rootCmd.PersistentFlags().String(ConfigFileKey, "", "path to configuration file for the apm")
-	rootCmd.PersistentFlags().String(ApmPathKey, apmDir, "path to the directory apm creates its artifacts")
-	rootCmd.PersistentFlags().String(PluginPathKey, filepath.Join(goPath, "src", "github.com", "ava-labs", "avalanchego", "build", "plugins"), "path to avalanche plugin directory")
-	rootCmd.PersistentFlags().String(CredentialsFileKey, "", "path to credentials file")
-	rootCmd.PersistentFlags().String(AdminApiEndpoint, "127.0.0.1:9650/ext/admin", "endpoint for the avalanche admin api")
+	rootCmd.PersistentFlags().String(configFileKey, "", "path to configuration file for the apm")
+	rootCmd.PersistentFlags().String(apmPathKey, apmDir, "path to the directory apm creates its artifacts")
+	rootCmd.PersistentFlags().String(pluginPathKey, filepath.Join(goPath, "src", "github.com", "ava-labs", "avalanchego", "build", "plugins"), "path to avalanche plugin directory")
+	rootCmd.PersistentFlags().String(credentialsFileKey, "", "path to credentials file")
+	rootCmd.PersistentFlags().String(adminApiEndpointKey, "127.0.0.1:9650/ext/admin", "endpoint for the avalanche admin api")
 
 	errs := wrappers.Errs{}
 	errs.Add(
-		viper.BindPFlag(ConfigFileKey, rootCmd.PersistentFlags().Lookup(ConfigFileKey)),
-		viper.BindPFlag(ApmPathKey, rootCmd.PersistentFlags().Lookup(ApmPathKey)),
-		viper.BindPFlag(PluginPathKey, rootCmd.PersistentFlags().Lookup(PluginPathKey)),
-		viper.BindPFlag(CredentialsFileKey, rootCmd.PersistentFlags().Lookup(CredentialsFileKey)),
-		viper.BindPFlag(AdminApiEndpoint, rootCmd.PersistentFlags().Lookup(AdminApiEndpoint)),
+		viper.BindPFlag(configFileKey, rootCmd.PersistentFlags().Lookup(configFileKey)),
+		viper.BindPFlag(apmPathKey, rootCmd.PersistentFlags().Lookup(apmPathKey)),
+		viper.BindPFlag(pluginPathKey, rootCmd.PersistentFlags().Lookup(pluginPathKey)),
+		viper.BindPFlag(credentialsFileKey, rootCmd.PersistentFlags().Lookup(credentialsFileKey)),
+		viper.BindPFlag(adminApiEndpointKey, rootCmd.PersistentFlags().Lookup(adminApiEndpointKey)),
 	)
 	if errs.Errored() {
 		return nil, errs.Err
@@ -65,15 +65,15 @@ func New() (*cobra.Command, error) {
 		joinSubnet(),
 	)
 
-	fmt.Printf("credentials file: %s\n", viper.GetString(CredentialsFileKey))
+	fmt.Printf("credentials file: %s\n", viper.GetString(credentialsFileKey))
 
 	return rootCmd, nil
 }
 
 // initializes config from file, if available.
 func initializeConfig() error {
-	if viper.IsSet(ConfigFileKey) {
-		cfgFile := os.ExpandEnv(viper.GetString(ConfigFileKey))
+	if viper.IsSet(configFileKey) {
+		cfgFile := os.ExpandEnv(viper.GetString(configFileKey))
 		viper.SetConfigFile(cfgFile)
 
 		return viper.ReadInConfig()
@@ -87,10 +87,10 @@ func initializeConfig() error {
 func getCredentials() (http.BasicAuth, error) {
 	result := http.BasicAuth{}
 
-	if viper.IsSet(CredentialsFileKey) {
+	if viper.IsSet(credentialsFileKey) {
 		credentials := &config.Credential{}
 
-		bytes, err := os.ReadFile(viper.GetString(CredentialsFileKey))
+		bytes, err := os.ReadFile(viper.GetString(credentialsFileKey))
 		if err != nil {
 			return result, err
 		}

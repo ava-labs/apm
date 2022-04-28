@@ -22,10 +22,10 @@ func joinSubnet() *cobra.Command {
 			return err
 		}
 		apm, err := apm.New(apm.Config{
-			Directory:        viper.GetString(ApmPathKey),
+			Directory:        viper.GetString(apmPathKey),
 			Auth:             credentials,
-			AdminApiEndpoint: viper.GetString(AdminApiEndpoint),
-			PluginDir:        viper.GetString(PluginPathKey),
+			AdminApiEndpoint: viper.GetString(adminApiEndpointKey),
+			PluginDir:        viper.GetString(pluginPathKey),
 		})
 
 		if err != nil {
