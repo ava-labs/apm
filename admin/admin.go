@@ -58,7 +58,7 @@ func (c *HttpClient) WhitelistSubnet(subnetID string) error {
 				"id"     :1,
 				"method" :"admin.whitelistSubnet",
 				"params": {
-					"subnetID":"%sasdfasdf"
+					"subnetID":"%s"
 				}
 			}`,
 			subnetID,
