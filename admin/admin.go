@@ -7,12 +7,12 @@ import (
 	"strings"
 )
 
+var _ Client = &HttpClient{}
+
 type Client interface {
 	LoadVMs() error
 	WhitelistSubnet(subnetID string) error
 }
-
-var _ Client = &HttpClient{}
 
 type HttpClientConfig struct {
 	Endpoint string
