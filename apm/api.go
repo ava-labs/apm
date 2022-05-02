@@ -22,10 +22,11 @@ import (
 	gitHttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"gopkg.in/yaml.v2"
 
+	"github.com/ava-labs/avalanche-plugins-core/core"
+
 	"github.com/ava-labs/apm/admin"
 	"github.com/ava-labs/apm/repository"
 	"github.com/ava-labs/apm/types"
-	"github.com/ava-labs/avalanche-plugins-core/core"
 )
 
 var (
@@ -266,6 +267,51 @@ Loop:
 }
 
 func (a *APM) Uninstall(alias string) error {
+	if qualifiedName(alias) {
+		return a.uninstall(alias)
+	}
+
+	fullName, err := getFullNameForAlias(a.vmDB, alias)
+	if err != nil {
+		return err
+	}
+
+	return a.uninstall(fullName)
+}
+
+func (a *APM) uninstall(name string) error {
+	nameBytes := []byte(name)
+
+	ok, err := a.installedVMs.Has(nameBytes)
+	if err != nil {
+		return err
+	}
+
+	if !ok {
+		fmt.Printf("VM %s is already not installed. Skipping.\n", name)
+		return nil
+	}
+
+	alias, plugin := parseQualifiedName(name)
+
+	repoDB := prefixdb.New([]byte(alias), a.db)
+	repoVMDB := prefixdb.New(vmPrefix, repoDB)
+
+	ok, err = repoVMDB.Has([]byte(plugin))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		fmt.Printf("Virtual machine already %s doesn't exist in the vm registry for %s.", name, alias)
+		return nil
+	}
+
+	if err := a.installedVMs.Delete([]byte(plugin)); err != nil {
+		return err
+	}
+
+	fmt.Printf("Successfully uninstalled %s.", name)
+
 	return nil
 }
 
