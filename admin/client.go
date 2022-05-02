@@ -41,6 +41,7 @@ func (c *HttpClient) LoadVMs() error {
 
 	err := c.executeHttpRequest(body)
 	if err != nil && strings.Contains(err.Error(), "connection refused") {
+		fmt.Printf("Node appears to be offline. Virtual machines will be registered upon node startup.")
 		// Node is offline case. This is fine, since the node will
 		// automatically register the new vms upon bootstrap.
 		return nil
