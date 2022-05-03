@@ -153,11 +153,14 @@ func (a *APM) install(name string) error {
 
 	alias, plugin := parseQualifiedName(name)
 	organization, repo := parseAlias(alias)
+	aliasBytes := []byte(alias)
 
-	repoDB := prefixdb.New([]byte(alias), a.db)
-	repoVMDB := prefixdb.New(vmPrefix, repoDB)
+	group := repository.NewPluginGroup(repository.PluginGroupConfig{
+		Alias: aliasBytes,
+		DB:    a.db,
+	})
 
-	bytes, err := repoVMDB.Get([]byte(plugin))
+	bytes, err := group.VMs().Get([]byte(plugin))
 	if err != nil {
 		return err
 	}
@@ -333,10 +336,12 @@ func (a *APM) JoinSubnet(alias string) error {
 func (a *APM) joinSubnet(fullName string) error {
 	alias, plugin := parseQualifiedName(fullName)
 	aliasBytes := []byte(alias)
-	repoDB := prefixdb.New(aliasBytes, a.db)
-	repoSubnetDB := prefixdb.New(subnetPrefix, repoDB)
+	group := repository.NewPluginGroup(repository.PluginGroupConfig{
+		Alias: aliasBytes,
+		DB:    a.db,
+	})
 
-	subnetBytes, err := repoSubnetDB.Get([]byte(plugin))
+	subnetBytes, err := group.Subnets().Get([]byte(plugin))
 	if err != nil {
 		return err
 	}
