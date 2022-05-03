@@ -30,11 +30,11 @@ import (
 )
 
 var (
-	dbDir        = "db"
-	repositories = "repositories"
-	tmp          = "tmp"
-	subnets      = "subnets"
-	vms          = "vms"
+	dbDir         = "db"
+	repositoryDir = "repositories"
+	tmpDir        = "tmp"
+	subnetDir     = "subnets"
+	vmDir         = "vms"
 
 	repoPrefix         = []byte("repo")
 	vmPrefix           = []byte("vm")
@@ -77,8 +77,8 @@ func New(config Config) (*APM, error) {
 	}
 
 	s := &APM{
-		repositoriesPath: filepath.Join(config.Directory, repositories),
-		tmpPath:          filepath.Join(config.Directory, tmp),
+		repositoriesPath: filepath.Join(config.Directory, repositoryDir),
+		tmpPath:          filepath.Join(config.Directory, tmpDir),
 		pluginPath:       config.PluginDir,
 		db:               db,
 		globalRegistry: repository.NewPluginGroup(repository.PluginGroupConfig{
@@ -432,13 +432,13 @@ func (a *APM) Update() error {
 
 		repoVMs := group.VMs()
 		repoSubnets := group.Subnets()
-		vmsPath := filepath.Join(repositoryPath, vms)
+		vmsPath := filepath.Join(repositoryPath, vmDir)
 
 		if err := loadFromYAML[*types.VM](vmKey, vmsPath, aliasBytes, latestCommit, a.globalRegistry.VMs(), repoVMs); err != nil {
 			return err
 		}
 
-		subnetsPath := filepath.Join(repositoryPath, subnets)
+		subnetsPath := filepath.Join(repositoryPath, subnetDir)
 		if err := loadFromYAML[*types.Subnet](subnetKey, subnetsPath, aliasBytes, latestCommit, a.globalRegistry.Subnets(), repoSubnets); err != nil {
 			return err
 		}
