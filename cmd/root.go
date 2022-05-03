@@ -65,8 +65,6 @@ func New() (*cobra.Command, error) {
 		joinSubnet(),
 	)
 
-	fmt.Printf("credentials file: %s\n", viper.GetString(credentialsFileKey))
-
 	return rootCmd, nil
 }
 
