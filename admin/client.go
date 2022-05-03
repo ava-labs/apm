@@ -20,11 +20,13 @@ type HttpClientConfig struct {
 
 type HttpClient struct {
 	endpoint string
+	client   http.Client
 }
 
 func NewHttpClient(config HttpClientConfig) *HttpClient {
 	return &HttpClient{
 		endpoint: config.Endpoint,
+		client:   http.Client{},
 	}
 }
 
@@ -76,8 +78,7 @@ func (c *HttpClient) executeHttpRequest(body []byte) error {
 	}
 	request.Header.Add("content-type", "application/json")
 
-	client := &http.Client{}
-	res, err := client.Do(request)
+	res, err := c.client.Do(request)
 	if err != nil {
 		return err
 	}
