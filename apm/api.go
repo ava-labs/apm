@@ -322,7 +322,7 @@ func (a *APM) JoinSubnet(alias string) error {
 		return a.joinSubnet(alias)
 	}
 
-	fullName, err := getFullNameForAlias(a.globalRegistry.VMs(), alias)
+	fullName, err := getFullNameForAlias(a.globalRegistry.Subnets(), alias)
 	if err != nil {
 		return err
 	}
