@@ -445,7 +445,7 @@ func (a *APM) Update() error {
 			return err
 		}
 
-		updatedMetadata := repository.Checkpoint{
+		updatedMetadata := repository.Metadata{
 			Alias:  repositoryMetadata.Alias,
 			URL:    repositoryMetadata.URL,
 			Commit: latestCommit,
@@ -496,7 +496,7 @@ func deleteStalePlugins[T types.Plugin](db database.Database, latestCommit plumb
 func (a *APM) AddRepository(alias string, url string) error {
 	//TODO don't let people remove core
 	//TODO should be idempotent
-	metadata := repository.Checkpoint{
+	metadata := repository.Metadata{
 		Alias:  alias,
 		URL:    url,
 		Commit: plumbing.ZeroHash, // hasn't been synced yet
@@ -531,7 +531,7 @@ func (a *APM) ListRepositories() error {
 	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
 	fmt.Fprintln(w, "alias\turl")
 	for itr.Next() {
-		metadata := &repository.Checkpoint{}
+		metadata := &repository.Metadata{}
 		if err := yaml.Unmarshal(itr.Value(), metadata); err != nil {
 			return err
 		}
@@ -542,13 +542,13 @@ func (a *APM) ListRepositories() error {
 	return nil
 }
 
-func (a *APM) repositoryMetadataFor(alias []byte) (*repository.Checkpoint, error) {
+func (a *APM) repositoryMetadataFor(alias []byte) (*repository.Metadata, error) {
 	repositoryMetadataBytes, err := a.repositoryDB.Get(alias)
 	if err != nil && err != database.ErrNotFound {
 		return nil, err
 	}
 
-	repositoryMetadata := &repository.Checkpoint{}
+	repositoryMetadata := &repository.Metadata{}
 	if err := yaml.Unmarshal(repositoryMetadataBytes, repositoryMetadata); err != nil {
 		return nil, err
 	}
