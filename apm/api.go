@@ -38,7 +38,6 @@ var (
 
 	repoPrefix         = []byte("repo")
 	vmPrefix           = []byte("vm")
-	subnetPrefix       = []byte("subnet")
 	installedVMsPrefix = []byte("installed_vms")
 	globalPrefix       = []byte("global")
 
@@ -58,11 +57,11 @@ type APM struct {
 	tmpPath          string
 	pluginPath       string
 
-	globalRegistry repository.Group
-
 	db           database.Database
 	repositoryDB database.Database
 	installedVMs database.Database
+
+	globalRegistry repository.Group
 
 	auth gitHttp.BasicAuth
 
