@@ -160,7 +160,7 @@ func (a *APM) install(name string) error {
 		return err
 	}
 
-	record := &repository.Record[*types.VM]{}
+	record := &repository.Plugin[*types.VM]{}
 	if err := yaml.Unmarshal(bytes, record); err != nil {
 		return err
 	}
@@ -339,7 +339,7 @@ func (a *APM) joinSubnet(fullName string) error {
 		return err
 	}
 
-	record := &repository.Record[*types.Subnet]{}
+	record := &repository.Plugin[*types.Subnet]{}
 	if err := yaml.Unmarshal(subnetBytes, record); err != nil {
 		return err
 	}
@@ -445,7 +445,7 @@ func (a *APM) Update() error {
 			return err
 		}
 
-		updatedMetadata := repository.Metadata{
+		updatedMetadata := repository.Checkpoint{
 			Alias:  repositoryMetadata.Alias,
 			URL:    repositoryMetadata.URL,
 			Commit: latestCommit,
@@ -474,7 +474,7 @@ func deleteStalePlugins[T types.Plugin](db database.Database, latestCommit plumb
 	batch := db.NewBatch()
 
 	for itr.Next() {
-		record := &repository.Record[T]{}
+		record := &repository.Plugin[T]{}
 		if err := yaml.Unmarshal(itr.Value(), record); err != nil {
 			return nil
 		}
@@ -496,7 +496,7 @@ func deleteStalePlugins[T types.Plugin](db database.Database, latestCommit plumb
 func (a *APM) AddRepository(alias string, url string) error {
 	//TODO don't let people remove core
 	//TODO should be idempotent
-	metadata := repository.Metadata{
+	metadata := repository.Checkpoint{
 		Alias:  alias,
 		URL:    url,
 		Commit: plumbing.ZeroHash, // hasn't been synced yet
@@ -531,7 +531,7 @@ func (a *APM) ListRepositories() error {
 	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
 	fmt.Fprintln(w, "alias\turl")
 	for itr.Next() {
-		metadata := &repository.Metadata{}
+		metadata := &repository.Checkpoint{}
 		if err := yaml.Unmarshal(itr.Value(), metadata); err != nil {
 			return err
 		}
@@ -542,13 +542,13 @@ func (a *APM) ListRepositories() error {
 	return nil
 }
 
-func (a *APM) repositoryMetadataFor(alias []byte) (*repository.Metadata, error) {
+func (a *APM) repositoryMetadataFor(alias []byte) (*repository.Checkpoint, error) {
 	repositoryMetadataBytes, err := a.repositoryDB.Get(alias)
 	if err != nil && err != database.ErrNotFound {
 		return nil, err
 	}
 
-	repositoryMetadata := &repository.Metadata{}
+	repositoryMetadata := &repository.Checkpoint{}
 	if err := yaml.Unmarshal(repositoryMetadataBytes, repositoryMetadata); err != nil {
 		return nil, err
 	}

@@ -70,7 +70,7 @@ func loadFromYAML[T types.Plugin](
 		if err := yaml.Unmarshal(fileBytes, data); err != nil {
 			return err
 		}
-		record := &repository.Record[T]{
+		record := &repository.Plugin[T]{
 			Plugin: data[key],
 			Commit: commit,
 		}
