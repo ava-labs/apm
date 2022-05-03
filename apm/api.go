@@ -192,6 +192,8 @@ func (a *APM) install(name string) error {
 		if err := cmd.Run(); err != nil {
 			return err
 		}
+	} else if err != nil {
+		return err
 	}
 
 	fmt.Printf("Uncompressing %s...\n", name)
