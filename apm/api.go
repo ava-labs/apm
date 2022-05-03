@@ -123,17 +123,22 @@ func New(config Config) (*APM, error) {
 	return a, nil
 }
 
-func (a *APM) Install(alias string) error {
+func parseAndRun(alias string, globalRegistry database.Database, command func(string) error) error {
 	if qualifiedName(alias) {
-		return a.install(alias)
+		return command(alias)
 	}
 
-	fullName, err := getFullNameForAlias(a.globalRegistry.VMs(), alias)
+	fullName, err := getFullNameForAlias(globalRegistry, alias)
 	if err != nil {
 		return err
 	}
 
-	return a.install(fullName)
+	return command(fullName)
+
+}
+
+func (a *APM) Install(alias string) error {
+	return parseAndRun(alias, a.globalRegistry.VMs(), a.install)
 }
 
 func (a *APM) install(name string) error {
@@ -171,16 +176,7 @@ func (a *APM) install(name string) error {
 }
 
 func (a *APM) Uninstall(alias string) error {
-	if qualifiedName(alias) {
-		return a.uninstall(alias)
-	}
-
-	fullName, err := getFullNameForAlias(a.globalRegistry.VMs(), alias)
-	if err != nil {
-		return err
-	}
-
-	return a.uninstall(fullName)
+	return parseAndRun(alias, a.globalRegistry.VMs(), a.uninstall)
 }
 
 func (a *APM) uninstall(name string) error {
@@ -220,16 +216,7 @@ func (a *APM) uninstall(name string) error {
 }
 
 func (a *APM) JoinSubnet(alias string) error {
-	if qualifiedName(alias) {
-		return a.joinSubnet(alias)
-	}
-
-	fullName, err := getFullNameForAlias(a.globalRegistry.Subnets(), alias)
-	if err != nil {
-		return err
-	}
-
-	return a.joinSubnet(fullName)
+	return parseAndRun(alias, a.globalRegistry.Subnets(), a.joinSubnet)
 }
 
 func (a *APM) joinSubnet(fullName string) error {
