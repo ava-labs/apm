@@ -9,14 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
-	"time"
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/leveldb"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/perms"
-	"github.com/cavaliergopher/grab/v3"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	gitHttp "github.com/go-git/go-git/v5/plumbing/transport/http"
@@ -27,6 +25,7 @@ import (
 	"github.com/ava-labs/apm/admin"
 	"github.com/ava-labs/apm/repository"
 	"github.com/ava-labs/apm/types"
+	"github.com/ava-labs/apm/url"
 )
 
 var (
@@ -57,15 +56,16 @@ type APM struct {
 	tmpPath          string
 	pluginPath       string
 
-	db           database.Database
-	repositoryDB database.Database
-	installedVMs database.Database
+	db           database.Database // base db
+	repositoryDB database.Database // repositories we track
+	installedVMs database.Database // vms that are currently installed
 
-	globalRegistry repository.Group
+	globalRegistry repository.Group // all vms and subnets able to be installed
 
 	auth gitHttp.BasicAuth
 
 	adminClient admin.Client
+	httpClient  url.Client
 }
 
 func New(config Config) (*APM, error) {
@@ -92,6 +92,7 @@ func New(config Config) (*APM, error) {
 				Endpoint: fmt.Sprintf("http://%s", config.AdminApiEndpoint),
 			},
 		),
+		httpClient: url.NewHttpClient(),
 	}
 
 	if err := os.MkdirAll(a.repositoriesPath, perms.ReadWriteExecute); err != nil {
@@ -172,7 +173,6 @@ func (a *APM) install(name string) error {
 	vm := record.Plugin
 	archiveFile := fmt.Sprintf("%s.tar.gz", plugin)
 	tmpPath := filepath.Join(a.tmpPath, organization, repo)
-	downloadPath := filepath.Join(tmpPath, archiveFile)
 
 	if vm.InstallScript == "" {
 		fmt.Printf("No install script found for %s.", name)
@@ -180,36 +180,8 @@ func (a *APM) install(name string) error {
 	}
 
 	// Download the .tar.gz file from the url
-	client := grab.NewClient()
-	req, _ := grab.NewRequest(downloadPath, vm.URL)
-
-	// Start downloading
-	fmt.Printf("Downloading %v...\n", req.URL())
-	resp := client.Do(req)
-	fmt.Printf("HTTP response %v\n", resp.HTTPResponse.Status)
-
-	// Start progress loop
-	t := time.NewTicker(1 * time.Second)
-	defer t.Stop()
-
-Loop:
-	for {
-		select {
-		case <-t.C:
-			fmt.Printf("  transferred %v / %v bytes (%.2f%%)\n",
-				resp.BytesComplete(),
-				resp.Size,
-				100*resp.Progress())
-
-		case <-resp.Done:
-			// download is complete
-			break Loop
-		}
-	}
-
-	// check for errors
-	if err := resp.Err(); err != nil {
-		return errors.New(fmt.Sprintf("Download failed: %s", err))
+	if err := a.httpClient.Download(filepath.Join(tmpPath, archiveFile), vm.URL); err != nil {
+		return err
 	}
 
 	// Create the directory we'll store the plugin sources in if it doesn't exist.
