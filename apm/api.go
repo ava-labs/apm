@@ -167,8 +167,7 @@ func (a *APM) install(name string) error {
 		HttpClient: a.httpClient,
 	})
 
-	engine := engine.NewWorkflowEngine()
-	return engine.Execute(workflow)
+	return a.engine.Execute(workflow)
 }
 
 func (a *APM) Uninstall(alias string) error {

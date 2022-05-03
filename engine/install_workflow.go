@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/ava-labs/avalanchego/database"
+	"github.com/ava-labs/avalanchego/utils/perms"
 	"gopkg.in/yaml.v3"
 
 	"github.com/ava-labs/apm/repository"
@@ -85,17 +86,14 @@ func (i InstallWorkflow) Execute() error {
 	// Create the directory we'll store the plugin sources in if it doesn't exist.
 	if _, err := os.Stat(i.plugin); errors.Is(err, os.ErrNotExist) {
 		fmt.Printf("Creating sources directory...\n")
-		cmd := exec.Command("mkdir", i.plugin)
-		cmd.Dir = tmpPath
-
-		if err := cmd.Run(); err != nil {
+		if err := os.Mkdir(filepath.Join(tmpPath, i.plugin), perms.ReadWriteExecute); err != nil {
 			return err
 		}
 	} else if err != nil {
 		return err
 	}
 
-	fmt.Printf("Uncompressing %s...\n", i.name)
+	fmt.Printf("Unpacking %s...\n", i.name)
 	cmd := exec.Command("tar", "xf", archiveFile, "-C", i.plugin, "--strip-components", "1")
 	cmd.Dir = tmpPath
 	if err := cmd.Run(); err != nil {
