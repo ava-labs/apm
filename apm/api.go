@@ -15,7 +15,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/go-git/go-git/v5/plumbing"
-	gitHttp "github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"gopkg.in/yaml.v2"
 
 	"github.com/ava-labs/avalanche-plugins-core/core"
@@ -45,7 +45,7 @@ var (
 
 type Config struct {
 	Directory        string
-	Auth             gitHttp.BasicAuth
+	Auth             http.BasicAuth
 	AdminApiEndpoint string
 	PluginDir        string
 }
@@ -61,7 +61,7 @@ type APM struct {
 
 	globalRegistry repository.Group // all vms and subnets able to be installed
 
-	auth gitHttp.BasicAuth
+	auth http.BasicAuth
 
 	adminClient admin.Client
 	httpClient  url.Client
