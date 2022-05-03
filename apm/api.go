@@ -341,7 +341,9 @@ func (a *APM) Update() error {
 			RepositoryDB:       a.repositoryDB,
 		})
 
-		return a.engine.Execute(workflow)
+		if err := a.engine.Execute(workflow); err != nil {
+			return err
+		}
 	}
 
 	return nil
