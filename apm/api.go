@@ -40,6 +40,7 @@ var (
 	vmPrefix           = []byte("vm")
 	subnetPrefix       = []byte("subnet")
 	installedVMsPrefix = []byte("installed_vms")
+	globalPrefix       = []byte("global")
 
 	vmKey     = "vm"
 	subnetKey = "subnet"
@@ -57,11 +58,10 @@ type APM struct {
 	tmpPath          string
 	pluginPath       string
 
+	globalRegistry repository.Group
+
 	db           database.Database
 	repositoryDB database.Database
-	subnetDB     database.Database
-	vmDB         database.Database
-
 	installedVMs database.Database
 
 	auth gitHttp.BasicAuth
@@ -81,11 +81,13 @@ func New(config Config) (*APM, error) {
 		tmpPath:          filepath.Join(config.Directory, tmp),
 		pluginPath:       config.PluginDir,
 		db:               db,
-		repositoryDB:     prefixdb.New(repoPrefix, db),
-		subnetDB:         prefixdb.New(subnetPrefix, db),
-		vmDB:             prefixdb.New(vmPrefix, db),
-		installedVMs:     prefixdb.New(installedVMsPrefix, db),
-		auth:             config.Auth,
+		globalRegistry: repository.NewPluginGroup(repository.PluginGroupConfig{
+			Alias: globalPrefix,
+			DB:    db,
+		}),
+		repositoryDB: prefixdb.New(repoPrefix, db),
+		installedVMs: prefixdb.New(installedVMsPrefix, db),
+		auth:         config.Auth,
 		adminClient: admin.NewHttpClient(
 			admin.HttpClientConfig{
 				Endpoint: fmt.Sprintf("http://%s", config.AdminApiEndpoint),
@@ -128,7 +130,7 @@ func (a *APM) Install(alias string) error {
 		return a.install(alias)
 	}
 
-	fullName, err := getFullNameForAlias(a.vmDB, alias)
+	fullName, err := getFullNameForAlias(a.globalRegistry.VMs(), alias)
 	if err != nil {
 		return err
 	}
@@ -271,7 +273,7 @@ func (a *APM) Uninstall(alias string) error {
 		return a.uninstall(alias)
 	}
 
-	fullName, err := getFullNameForAlias(a.vmDB, alias)
+	fullName, err := getFullNameForAlias(a.globalRegistry.VMs(), alias)
 	if err != nil {
 		return err
 	}
@@ -320,7 +322,7 @@ func (a *APM) JoinSubnet(alias string) error {
 		return a.joinSubnet(alias)
 	}
 
-	fullName, err := getFullNameForAlias(a.subnetDB, alias)
+	fullName, err := getFullNameForAlias(a.globalRegistry.VMs(), alias)
 	if err != nil {
 		return err
 	}
@@ -380,7 +382,7 @@ func (a *APM) Info(alias string) error {
 		return a.install(alias)
 	}
 
-	fullName, err := getFullNameForAlias(a.vmDB, alias)
+	fullName, err := getFullNameForAlias(a.globalRegistry.VMs(), alias)
 	if err != nil {
 		return err
 	}
@@ -423,25 +425,29 @@ func (a *APM) Update() error {
 			continue
 		}
 
-		repoDB := prefixdb.New(aliasBytes, a.db)
+		group := repository.NewPluginGroup(repository.PluginGroupConfig{
+			Alias: aliasBytes,
+			DB:    a.db,
+		})
 
+		repoVMs := group.VMs()
+		repoSubnets := group.Subnets()
 		vmsPath := filepath.Join(repositoryPath, vms)
-		repoVMDB := prefixdb.New(vmPrefix, repoDB)
-		if err := loadFromYAML[*types.VM](vmKey, vmsPath, aliasBytes, latestCommit, a.vmDB, repoVMDB); err != nil {
+
+		if err := loadFromYAML[*types.VM](vmKey, vmsPath, aliasBytes, latestCommit, a.globalRegistry.VMs(), repoVMs); err != nil {
 			return err
 		}
 
 		subnetsPath := filepath.Join(repositoryPath, subnets)
-		repoSubnetDB := prefixdb.New(subnetPrefix, repoDB)
-		if err := loadFromYAML[*types.Subnet](subnetKey, subnetsPath, aliasBytes, latestCommit, a.subnetDB, repoSubnetDB); err != nil {
+		if err := loadFromYAML[*types.Subnet](subnetKey, subnetsPath, aliasBytes, latestCommit, a.globalRegistry.Subnets(), repoSubnets); err != nil {
 			return err
 		}
 
 		// Now we need to delete anything that wasn't updated in the latest commit
-		if err := deleteStalePlugins[*types.VM](repoVMDB, latestCommit); err != nil {
+		if err := deleteStalePlugins[*types.VM](repoVMs, latestCommit); err != nil {
 			return err
 		}
-		if err := deleteStalePlugins[*types.Subnet](repoSubnetDB, latestCommit); err != nil {
+		if err := deleteStalePlugins[*types.Subnet](repoSubnets, latestCommit); err != nil {
 			return err
 		}
 

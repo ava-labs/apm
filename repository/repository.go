@@ -1,28 +1,56 @@
 package repository
 
 import (
-	"github.com/go-git/go-git/v5/plumbing"
-
-	"github.com/ava-labs/apm/types"
+	"github.com/ava-labs/avalanchego/database"
+	"github.com/ava-labs/avalanchego/database/prefixdb"
 )
 
-// Metadata represents a repository, its source, and the last synced commit.
-type Metadata struct {
-	Alias  string        `yaml:"alias"`
-	URL    string        `yaml:"url"`
-	Commit plumbing.Hash `yaml:"commit"`
+var (
+	repo   = []byte("repo")
+	vm     = []byte("vm")
+	subnet = []byte("subnet")
+
+	_ Group = &PluginGroup{}
+)
+
+// Group defines access to a plugin repository's plugins
+type Group interface {
+	VMs() database.Database
+	Subnets() database.Database
 }
 
-// Registry is a list of repositories that support a single plugin alias.
-// e.g. foo/plugin, bar/plugin => plugin: [foo, bar]
-type Registry struct {
-	Repositories []string `yaml:"repositories"`
+// PluginGroupConfig configures parameters for PluginGroup
+type PluginGroupConfig struct {
+	Alias []byte
+	DB    database.Database
 }
 
-// Plugin stores a plugin definition alongside the plugin-repository's commit
-// it was downloaded from.
-// TODO gc plugins
-type Plugin[T types.Plugin] struct {
-	Plugin T             `yaml:"plugin"`
-	Commit plumbing.Hash `yaml:"commit"`
+// PluginGroup wraps a plugin repository's vms and subnets
+type PluginGroup struct {
+	vms, subnets database.Database
+}
+
+// NewPluginGroup returns an instance of PluginGroup
+func NewPluginGroup(config PluginGroupConfig) *PluginGroup {
+	// all repositories
+	repositories := prefixdb.New(repo, config.DB)
+	// this specific repository
+	repo := prefixdb.New(config.Alias, repositories)
+
+	// vms and subnets for this repository
+	repoVMs := prefixdb.New(vm, repo)
+	repoSubnets := prefixdb.New(subnet, repo)
+
+	return &PluginGroup{
+		vms:     repoVMs,
+		subnets: repoSubnets,
+	}
+}
+
+func (p *PluginGroup) VMs() database.Database {
+	return p.vms
+}
+
+func (p *PluginGroup) Subnets() database.Database {
+	return p.subnets
 }
