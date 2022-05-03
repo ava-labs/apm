@@ -15,7 +15,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/ava-labs/avalanche-plugins-core/core"
 
@@ -25,22 +25,18 @@ import (
 	"github.com/ava-labs/apm/repository"
 	"github.com/ava-labs/apm/types"
 	"github.com/ava-labs/apm/url"
+	"github.com/ava-labs/apm/util"
 )
 
 var (
 	dbDir         = "db"
 	repositoryDir = "repositories"
 	tmpDir        = "tmp"
-	subnetDir     = "subnets"
-	vmDir         = "vms"
 
 	repoPrefix         = []byte("repo")
 	vmPrefix           = []byte("vm")
 	installedVMsPrefix = []byte("installed_vms")
 	globalPrefix       = []byte("global")
-
-	vmKey     = "vm"
-	subnetKey = "subnet"
 )
 
 type Config struct {
@@ -153,8 +149,8 @@ func (a *APM) install(name string) error {
 		return nil
 	}
 
-	alias, plugin := parseQualifiedName(name)
-	organization, repo := parseAlias(alias)
+	alias, plugin := util.ParseQualifiedName(name)
+	organization, repo := util.ParseAlias(alias)
 
 	workflow := engine.NewInstallWorkflow(engine.InstallWorkflowConfig{
 		Name:         name,
@@ -201,7 +197,7 @@ func (a *APM) uninstall(name string) error {
 		return nil
 	}
 
-	alias, plugin := parseQualifiedName(name)
+	alias, plugin := util.ParseQualifiedName(name)
 
 	repoDB := prefixdb.New([]byte(alias), a.db)
 	repoVMDB := prefixdb.New(vmPrefix, repoDB)
@@ -238,14 +234,14 @@ func (a *APM) JoinSubnet(alias string) error {
 }
 
 func (a *APM) joinSubnet(fullName string) error {
-	alias, plugin := parseQualifiedName(fullName)
+	alias, plugin := util.ParseQualifiedName(fullName)
 	aliasBytes := []byte(alias)
-	group := repository.NewPluginGroup(repository.PluginGroupConfig{
+	repoRegistry := repository.NewPluginGroup(repository.PluginGroupConfig{
 		Alias: aliasBytes,
 		DB:    a.db,
 	})
 
-	subnetBytes, err := group.Subnets().Get([]byte(plugin))
+	subnetBytes, err := repoRegistry.Subnets().Get([]byte(plugin))
 	if err != nil {
 		return err
 	}
@@ -308,7 +304,7 @@ func (a *APM) Update() error {
 
 	for itr.Next() {
 		aliasBytes := itr.Key()
-		organization, repo := parseAlias(string(aliasBytes))
+		organization, repo := util.ParseAlias(string(aliasBytes))
 
 		repositoryMetadata, err := a.repositoryMetadataFor(aliasBytes)
 		if err != nil {
@@ -331,78 +327,39 @@ func (a *APM) Update() error {
 			continue
 		}
 
-		group := repository.NewPluginGroup(repository.PluginGroupConfig{
-			Alias: aliasBytes,
-			DB:    a.db,
+		workflow := engine.NewUpdateWorkflow(engine.UpdateWorkflowConfig{
+			RepoName:       repo,
+			RepositoryPath: repositoryPath,
+			AliasBytes:     aliasBytes,
+			PreviousCommit: previousCommit,
+			LatestCommit:   latestCommit,
+			RepoRegistry: repository.NewPluginGroup(repository.PluginGroupConfig{
+				Alias: aliasBytes,
+				DB:    a.db,
+			}),
+			GlobalRegistry:     a.globalRegistry,
+			RepositoryMetadata: *repositoryMetadata,
+			RepositoryDB:       a.repositoryDB,
 		})
 
-		repoVMs := group.VMs()
-		repoSubnets := group.Subnets()
-		vmsPath := filepath.Join(repositoryPath, vmDir)
-
-		if err := loadFromYAML[*types.VM](vmKey, vmsPath, aliasBytes, latestCommit, a.globalRegistry.VMs(), repoVMs); err != nil {
-			return err
-		}
-
-		subnetsPath := filepath.Join(repositoryPath, subnetDir)
-		if err := loadFromYAML[*types.Subnet](subnetKey, subnetsPath, aliasBytes, latestCommit, a.globalRegistry.Subnets(), repoSubnets); err != nil {
-			return err
-		}
-
-		// Now we need to delete anything that wasn't updated in the latest commit
-		if err := deleteStalePlugins[*types.VM](repoVMs, latestCommit); err != nil {
-			return err
-		}
-		if err := deleteStalePlugins[*types.Subnet](repoSubnets, latestCommit); err != nil {
-			return err
-		}
-
-		updatedMetadata := repository.Metadata{
-			Alias:  repositoryMetadata.Alias,
-			URL:    repositoryMetadata.URL,
-			Commit: latestCommit,
-		}
-		updatedMetadataBytes, err := yaml.Marshal(updatedMetadata)
-		if err != nil {
-			return err
-		}
-
-		if err := a.repositoryDB.Put(aliasBytes, updatedMetadataBytes); err != nil {
-			return err
-		}
-
-		if previousCommit == plumbing.ZeroHash {
-			fmt.Printf("Finished initializing %s@%s.\n", repo, latestCommit)
-		} else {
-			fmt.Printf("Finished updating from %s to %s@%s.\n", previousCommit, repo, latestCommit)
-		}
+		return a.engine.Execute(workflow)
 	}
 
 	return nil
 }
 
-func deleteStalePlugins[T types.Plugin](db database.Database, latestCommit plumbing.Hash) error {
-	itr := db.NewIterator()
-	batch := db.NewBatch()
-
-	for itr.Next() {
-		record := &repository.Plugin[T]{}
-		if err := yaml.Unmarshal(itr.Value(), record); err != nil {
-			return nil
-		}
-
-		if record.Commit != latestCommit {
-			fmt.Printf("Deleting a stale plugin: %s@%s as of %s.\n", record.Plugin.Alias(), record.Commit, latestCommit)
-			if err := batch.Delete(itr.Key()); err != nil {
-				return err
-			}
-		}
+func (a *APM) repositoryMetadataFor(alias []byte) (*repository.Metadata, error) {
+	repositoryMetadataBytes, err := a.repositoryDB.Get(alias)
+	if err != nil && err != database.ErrNotFound {
+		return nil, err
 	}
 
-	if err := batch.Write(); err != nil {
-		return err
+	repositoryMetadata := &repository.Metadata{}
+	if err := yaml.Unmarshal(repositoryMetadataBytes, repositoryMetadata); err != nil {
+		return nil, err
 	}
-	return nil
+
+	return repositoryMetadata, nil
 }
 
 func (a *APM) AddRepository(alias string, url string) error {
@@ -450,22 +407,22 @@ func (a *APM) removeRepository(name string) error {
 	//TODO don't let people remove core
 	aliasBytes := []byte(name)
 
-	group := repository.NewPluginGroup(repository.PluginGroupConfig{
+	repoRegistry := repository.NewPluginGroup(repository.PluginGroupConfig{
 		Alias: aliasBytes,
 		DB:    a.db,
 	})
 
 	// delete all the plugin definitions in the repository
-	vmItr := group.VMs().NewIterator()
+	vmItr := repoRegistry.VMs().NewIterator()
 	for vmItr.Next() {
-		if err := group.VMs().Delete(vmItr.Key()); err != nil {
+		if err := repoRegistry.VMs().Delete(vmItr.Key()); err != nil {
 			return err
 		}
 	}
 
-	subnetItr := group.VMs().NewIterator()
+	subnetItr := repoRegistry.VMs().NewIterator()
 	for subnetItr.Next() {
-		if err := group.VMs().Delete(subnetItr.Key()); err != nil {
+		if err := repoRegistry.VMs().Delete(subnetItr.Key()); err != nil {
 			return err
 		}
 	}
@@ -489,20 +446,6 @@ func (a *APM) ListRepositories() error {
 	}
 	w.Flush()
 	return nil
-}
-
-func (a *APM) repositoryMetadataFor(alias []byte) (*repository.Metadata, error) {
-	repositoryMetadataBytes, err := a.repositoryDB.Get(alias)
-	if err != nil && err != database.ErrNotFound {
-		return nil, err
-	}
-
-	repositoryMetadata := &repository.Metadata{}
-	if err := yaml.Unmarshal(repositoryMetadataBytes, repositoryMetadata); err != nil {
-		return nil, err
-	}
-
-	return repositoryMetadata, nil
 }
 
 func qualifiedName(name string) bool {

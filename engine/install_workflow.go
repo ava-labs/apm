@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/ava-labs/avalanchego/database"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/ava-labs/apm/repository"
 	"github.com/ava-labs/apm/types"
