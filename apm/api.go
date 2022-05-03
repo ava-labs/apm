@@ -3,7 +3,6 @@ package apm
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,7 +14,6 @@ import (
 	"github.com/ava-labs/avalanchego/database/prefixdb"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/perms"
-	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	gitHttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"gopkg.in/yaml.v2"
@@ -23,6 +21,7 @@ import (
 	"github.com/ava-labs/avalanche-plugins-core/core"
 
 	"github.com/ava-labs/apm/admin"
+	"github.com/ava-labs/apm/git"
 	"github.com/ava-labs/apm/repository"
 	"github.com/ava-labs/apm/types"
 	"github.com/ava-labs/apm/url"
@@ -378,22 +377,20 @@ func (a *APM) Update() error {
 		organization, repo := parseAlias(string(aliasBytes))
 
 		repositoryMetadata, err := a.repositoryMetadataFor(aliasBytes)
+		if err != nil {
+			return err
+		}
 		repositoryPath := filepath.Join(a.repositoriesPath, organization, repo)
-		gitRepository, err := a.syncRepository(repositoryMetadata.URL, repositoryPath, "refs/heads/main")
-
-		head, err := gitRepository.Head()
+		gitRepo, err := git.NewRemote(repositoryMetadata.URL, repositoryPath, "refs/heads/main", &a.auth)
 		if err != nil {
 			return err
 		}
 
 		previousCommit := repositoryMetadata.Commit
-
-		// Our head should have the latest changes now
-		head, err = gitRepository.Head()
+		latestCommit, err := gitRepo.Head()
 		if err != nil {
 			return err
 		}
-		latestCommit := head.Hash()
 
 		if latestCommit == previousCommit {
 			fmt.Printf("Already at latest for %s@%s.\n", repo, previousCommit)
@@ -572,47 +569,6 @@ func (a *APM) repositoryMetadataFor(alias []byte) (*repository.Metadata, error) 
 	}
 
 	return repositoryMetadata, nil
-}
-
-func (a *APM) syncRepository(url string, path string, reference plumbing.ReferenceName) (*git.Repository, error) {
-	var gitRepository *git.Repository
-	if _, err := os.Stat(path); err == nil {
-		// already exists, we need to check out the latest changes
-		gitRepository, err = git.PlainOpen(path)
-		if err != nil {
-			return nil, err
-		}
-		worktree, err := gitRepository.Worktree()
-		if err != nil {
-			return nil, err
-		}
-		err = worktree.Pull(
-			//TODO use fetch + checkout instead of pull
-			&git.PullOptions{
-				RemoteName:    "origin",
-				ReferenceName: reference,
-				SingleBranch:  true,
-				Auth:          &a.auth,
-				Progress:      io.Discard,
-			},
-		)
-	} else if os.IsNotExist(err) {
-		// otherwise, we need to clone the repository
-		gitRepository, err = git.PlainClone(path, false, &git.CloneOptions{
-			URL:           url,
-			ReferenceName: reference,
-			SingleBranch:  true,
-			Auth:          &a.auth,
-			Progress:      io.Discard,
-		})
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		return nil, err
-	}
-
-	return gitRepository, nil
 }
 
 func qualifiedName(name string) bool {
