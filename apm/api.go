@@ -75,7 +75,7 @@ func New(config Config) (*APM, error) {
 		return nil, err
 	}
 
-	s := &APM{
+	a := &APM{
 		repositoriesPath: filepath.Join(config.Directory, repositoryDir),
 		tmpPath:          filepath.Join(config.Directory, tmpDir),
 		pluginPath:       config.PluginDir,
@@ -94,34 +94,34 @@ func New(config Config) (*APM, error) {
 		),
 	}
 
-	if err := os.MkdirAll(s.repositoriesPath, perms.ReadWriteExecute); err != nil {
+	if err := os.MkdirAll(a.repositoriesPath, perms.ReadWriteExecute); err != nil {
 		return nil, err
 	}
 
 	//TODO simplify this
 	coreKey := []byte(core.Alias)
-	if _, err = s.repositoryDB.Get(coreKey); err == database.ErrNotFound {
-		err := s.AddRepository(core.Alias, core.URL)
+	if _, err = a.repositoryDB.Get(coreKey); err == database.ErrNotFound {
+		err := a.AddRepository(core.Alias, core.URL)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	repoMetadata, err := s.repositoryMetadataFor(coreKey)
+	repoMetadata, err := a.repositoryMetadataFor(coreKey)
 	if err != nil {
 		return nil, err
 	}
 
 	if repoMetadata.Commit == plumbing.ZeroHash {
 		fmt.Println("Bootstrap not detected. Bootstrapping...")
-		err := s.Update()
+		err := a.Update()
 		if err != nil {
 			return nil, err
 		}
 
 		fmt.Println("Finished bootstrapping.")
 	}
-	return s, nil
+	return a, nil
 }
 
 func (a *APM) Install(alias string) error {
@@ -402,7 +402,6 @@ func (a *APM) Update() error {
 	itr := a.repositoryDB.NewIterator()
 
 	for itr.Next() {
-		// Need to split the alias to support Windows
 		aliasBytes := itr.Key()
 		organization, repo := parseAlias(string(aliasBytes))
 
@@ -504,8 +503,16 @@ func deleteStalePlugins[T types.Plugin](db database.Database, latestCommit plumb
 }
 
 func (a *APM) AddRepository(alias string, url string) error {
-	//TODO don't let people remove core
-	//TODO should be idempotent
+	aliasBytes := []byte(alias)
+	ok, err := a.repositoryDB.Has(aliasBytes)
+	if err != nil {
+		return err
+	}
+	if ok {
+		fmt.Printf("%s is already registered as a repository.\n", alias)
+		return nil
+	}
+
 	metadata := repository.Metadata{
 		Alias:  alias,
 		URL:    url,
@@ -515,21 +522,50 @@ func (a *APM) AddRepository(alias string, url string) error {
 	if err != nil {
 		return err
 	}
-	return a.repositoryDB.Put([]byte(alias), metadataBytes)
+	return a.repositoryDB.Put(aliasBytes, metadataBytes)
 }
 
 func (a *APM) RemoveRepository(alias string) error {
-	aliasBytes := []byte(alias)
-	repoDB := prefixdb.New(aliasBytes, a.db)
-	itr := repoDB.NewIterator()
+	if qualifiedName(alias) {
+		return a.removeRepository(alias)
+	}
+
+	fullName, err := getFullNameForAlias(a.globalRegistry.VMs(), alias)
+	if err != nil {
+		return err
+	}
+
+	return a.removeRepository(fullName)
+}
+
+func (a *APM) removeRepository(name string) error {
+	if name == core.Alias {
+		fmt.Printf("Can't remove %s (required repository).\n", core.Alias)
+		return nil
+	}
+
+	//TODO don't let people remove core
+	aliasBytes := []byte(name)
+
+	group := repository.NewPluginGroup(repository.PluginGroupConfig{
+		Alias: aliasBytes,
+		DB:    a.db,
+	})
 
 	// delete all the plugin definitions in the repository
-	for itr.Next() {
-		if err := repoDB.Delete(itr.Key()); err != nil {
+	vmItr := group.VMs().NewIterator()
+	for vmItr.Next() {
+		if err := group.VMs().Delete(vmItr.Key()); err != nil {
 			return err
 		}
 	}
-	//TODO remove from subnets + vms
+
+	subnetItr := group.VMs().NewIterator()
+	for subnetItr.Next() {
+		if err := group.VMs().Delete(subnetItr.Key()); err != nil {
+			return err
+		}
+	}
 
 	// remove it from our list of tracked repositories
 	return a.repositoryDB.Delete(aliasBytes)
