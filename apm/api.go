@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
@@ -21,6 +20,7 @@ import (
 	"github.com/ava-labs/avalanche-plugins-core/core"
 
 	"github.com/ava-labs/apm/admin"
+	"github.com/ava-labs/apm/engine"
 	"github.com/ava-labs/apm/git"
 	"github.com/ava-labs/apm/repository"
 	"github.com/ava-labs/apm/types"
@@ -65,6 +65,8 @@ type APM struct {
 
 	adminClient admin.Client
 	httpClient  url.Client
+
+	engine engine.Engine
 }
 
 func New(config Config) (*APM, error) {
@@ -92,6 +94,7 @@ func New(config Config) (*APM, error) {
 			},
 		),
 		httpClient: url.NewHttpClient(),
+		engine:     engine.NewWorkflowEngine(),
 	}
 
 	if err := os.MkdirAll(a.repositoriesPath, perms.ReadWriteExecute); err != nil {
@@ -152,92 +155,24 @@ func (a *APM) install(name string) error {
 
 	alias, plugin := parseQualifiedName(name)
 	organization, repo := parseAlias(alias)
-	aliasBytes := []byte(alias)
 
-	group := repository.NewPluginGroup(repository.PluginGroupConfig{
-		Alias: aliasBytes,
-		DB:    a.db,
+	workflow := engine.NewInstallWorkflow(engine.InstallWorkflowConfig{
+		Name:         name,
+		Plugin:       plugin,
+		Organization: organization,
+		Repo:         repo,
+		TmpPath:      a.tmpPath,
+		PluginPath:   a.pluginPath,
+		InstalledVMs: a.installedVMs,
+		Group: repository.NewPluginGroup(repository.PluginGroupConfig{
+			Alias: []byte(alias),
+			DB:    a.db,
+		}),
+		HttpClient: a.httpClient,
 	})
 
-	bytes, err := group.VMs().Get([]byte(plugin))
-	if err != nil {
-		return err
-	}
-
-	record := &repository.Plugin[*types.VM]{}
-	if err := yaml.Unmarshal(bytes, record); err != nil {
-		return err
-	}
-
-	vm := record.Plugin
-	archiveFile := fmt.Sprintf("%s.tar.gz", plugin)
-	tmpPath := filepath.Join(a.tmpPath, organization, repo)
-
-	if vm.InstallScript == "" {
-		fmt.Printf("No install script found for %s.", name)
-		return nil
-	}
-
-	// Download the .tar.gz file from the url
-	if err := a.httpClient.Download(filepath.Join(tmpPath, archiveFile), vm.URL); err != nil {
-		return err
-	}
-
-	// Create the directory we'll store the plugin sources in if it doesn't exist.
-	if _, err := os.Stat(plugin); errors.Is(err, os.ErrNotExist) {
-		fmt.Printf("Creating sources directory...\n")
-		cmd := exec.Command("mkdir", plugin)
-		cmd.Dir = tmpPath
-
-		if err := cmd.Run(); err != nil {
-			return err
-		}
-	} else if err != nil {
-		return err
-	}
-
-	fmt.Printf("Uncompressing %s...\n", name)
-	cmd := exec.Command("tar", "xf", archiveFile, "-C", plugin, "--strip-components", "1")
-	cmd.Dir = tmpPath
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	workingDir := filepath.Join(tmpPath, plugin)
-	fmt.Printf("Running install script at %s...\n", vm.InstallScript)
-	cmd = exec.Command(vm.InstallScript)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Dir = workingDir
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	fmt.Printf("Moving binary %s into plugin directory...\n", vm.ID_)
-	if err := os.Rename(filepath.Join(workingDir, vm.BinaryPath), filepath.Join(a.pluginPath, vm.ID_)); err != nil {
-		return err
-	}
-
-	fmt.Printf("Cleaning up temporary files...\n")
-	if err := os.Remove(filepath.Join(tmpPath, archiveFile)); err != nil {
-		return err
-	}
-
-	if err := os.RemoveAll(filepath.Join(tmpPath, plugin)); err != nil {
-		return err
-	}
-
-	fmt.Printf("Adding virtual machine %s to installation registry...\n", vm.ID_)
-	installedVersion, err := yaml.Marshal(vm.Version)
-	if err != nil {
-		return err
-	}
-	if err := a.installedVMs.Put(nameBytes, installedVersion); err != nil {
-		return err
-	}
-
-	fmt.Printf("Successfully installed %s@v%v.%v.%v.\n", name, vm.Version.Major(), vm.Version.Minor(), vm.Version.Patch())
-	return nil
+	engine := engine.NewWorkflowEngine()
+	return engine.Execute(workflow)
 }
 
 func (a *APM) Uninstall(alias string) error {
