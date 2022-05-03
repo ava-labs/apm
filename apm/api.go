@@ -213,18 +213,15 @@ func (a *APM) install(name string) error {
 
 	fmt.Printf("Moving binary %s into plugin directory...\n", vm.ID_)
 	if err := os.Rename(filepath.Join(workingDir, vm.BinaryPath), filepath.Join(a.pluginPath, vm.ID_)); err != nil {
-		panic(err)
 		return err
 	}
 
 	fmt.Printf("Cleaning up temporary files...\n")
 	if err := os.Remove(filepath.Join(tmpPath, archiveFile)); err != nil {
-		panic(err)
 		return err
 	}
 
 	if err := os.RemoveAll(filepath.Join(tmpPath, plugin)); err != nil {
-		panic(err)
 		return err
 	}
 
