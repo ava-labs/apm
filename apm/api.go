@@ -314,6 +314,7 @@ func (a *APM) Update() error {
 		}
 
 		workflow := engine.NewUpdateWorkflow(engine.UpdateWorkflowConfig{
+			Engine:         a.engine,
 			RepoName:       repo,
 			RepositoryPath: repositoryPath,
 			AliasBytes:     aliasBytes,

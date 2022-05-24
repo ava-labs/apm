@@ -24,6 +24,7 @@ var (
 )
 
 type UpdateWorkflowConfig struct {
+	Engine         Engine
 	RepoName       string
 	RepositoryPath string
 
@@ -42,6 +43,7 @@ type UpdateWorkflowConfig struct {
 
 func NewUpdateWorkflow(config UpdateWorkflowConfig) *UpdateWorkflow {
 	return &UpdateWorkflow{
+		engine:             config.Engine,
 		repoName:           config.RepoName,
 		repositoryPath:     config.RepositoryPath,
 		aliasBytes:         config.AliasBytes,
@@ -55,6 +57,7 @@ func NewUpdateWorkflow(config UpdateWorkflowConfig) *UpdateWorkflow {
 }
 
 type UpdateWorkflow struct {
+	engine         Engine
 	repoName       string
 	repositoryPath string
 
@@ -72,6 +75,37 @@ type UpdateWorkflow struct {
 }
 
 func (u UpdateWorkflow) Execute() error {
+	if err := u.updateDefinitions(); err != nil {
+		fmt.Printf("Unexpected error while updating definitions. %s", err)
+		return err
+	}
+
+	vmItr := u.repoRegistry.VMs().NewIterator()
+
+	for vmItr.Next() {
+		updatedVM := &types.VM{}
+		err := yaml.Unmarshal(vmItr.Value(), updatedVM)
+		if err != nil {
+			//TODO remove this from the registry..?
+			return err
+		}
+
+		installedVM := &types.VM{}
+		installedVMBytes, err := u.globalRegistry.VMs().Get(vmItr.Key())
+		err = yaml.Unmarshal(installedVMBytes, installedVM)
+		if err != nil {
+			return err
+		}
+
+		if installedVM.Version != updatedVM {
+			fmt.Printf("Detected an update for %s from %s to %s.")
+		}
+	}
+
+	return nil
+}
+
+func (u UpdateWorkflow) updateDefinitions() error {
 	repoVMs := u.repoRegistry.VMs()
 	repoSubnets := u.repoRegistry.Subnets()
 	vmsPath := filepath.Join(u.repositoryPath, vmDir)
@@ -108,9 +142,9 @@ func (u UpdateWorkflow) Execute() error {
 	}
 
 	if u.previousCommit == plumbing.ZeroHash {
-		fmt.Printf("Finished initializing %s@%s.\n", u.repoName, u.latestCommit)
+		fmt.Printf("Finished initializing definitions for%s@%s.\n", u.repoName, u.latestCommit)
 	} else {
-		fmt.Printf("Finished updating from %s to %s@%s.\n", u.previousCommit, u.repoName, u.latestCommit)
+		fmt.Printf("Finished updating definitions from %s to %s@%s.\n", u.previousCommit, u.repoName, u.latestCommit)
 	}
 
 	return nil
