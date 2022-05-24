@@ -31,7 +31,7 @@ func NewRemote(url string, path string, reference plumbing.ReferenceName, auth *
 		if err != nil {
 			return nil, err
 		}
-		err = worktree.Pull(
+		if err := worktree.Pull(
 			//TODO use fetch + checkout instead of pull
 			&git.PullOptions{
 				RemoteName:    "origin",
@@ -40,7 +40,9 @@ func NewRemote(url string, path string, reference plumbing.ReferenceName, auth *
 				Auth:          auth,
 				Progress:      io.Discard,
 			},
-		)
+		); err != nil && err != git.NoErrAlreadyUpToDate {
+			return nil, err
+		}
 	} else if os.IsNotExist(err) {
 		// otherwise, we need to clone the repository
 		repo, err = git.PlainClone(path, false, &git.CloneOptions{

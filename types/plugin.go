@@ -1,6 +1,6 @@
 package types
 
-type Plugin interface {
+type Definition interface {
 	ID() string
 	Alias() string
 	Homepage() string

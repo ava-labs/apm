@@ -10,28 +10,28 @@ var (
 	vm     = []byte("vm")
 	subnet = []byte("subnet")
 
-	_ Group = &PluginGroup{}
+	_ Registry = &registry{}
 )
 
-// Group defines access to a plugin repository's plugins
-type Group interface {
+// Registry defines access to a plugin repository's plugins
+type Registry interface {
 	VMs() database.Database
 	Subnets() database.Database
 }
 
-// PluginGroupConfig configures parameters for PluginGroup
-type PluginGroupConfig struct {
+// RegistryConfig configures parameters for registry
+type RegistryConfig struct {
 	Alias []byte
 	DB    database.Database
 }
 
-// PluginGroup wraps a plugin repository's vms and subnets
-type PluginGroup struct {
+// registry wraps a plugin repository's vms and subnets
+type registry struct {
 	vms, subnets database.Database
 }
 
-// NewPluginGroup returns an instance of PluginGroup
-func NewPluginGroup(config PluginGroupConfig) *PluginGroup {
+// NewRegistry returns an instance of registry
+func NewRegistry(config RegistryConfig) *registry {
 	// all repositories
 	repositories := prefixdb.New(repo, config.DB)
 	// this specific repository
@@ -41,16 +41,16 @@ func NewPluginGroup(config PluginGroupConfig) *PluginGroup {
 	repoVMs := prefixdb.New(vm, repo)
 	repoSubnets := prefixdb.New(subnet, repo)
 
-	return &PluginGroup{
+	return &registry{
 		vms:     repoVMs,
 		subnets: repoSubnets,
 	}
 }
 
-func (p *PluginGroup) VMs() database.Database {
+func (p *registry) VMs() database.Database {
 	return p.vms
 }
 
-func (p *PluginGroup) Subnets() database.Database {
+func (p *registry) Subnets() database.Database {
 	return p.subnets
 }

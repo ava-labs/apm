@@ -27,7 +27,7 @@ type InstallWorkflowConfig struct {
 	PluginPath   string
 
 	InstalledVMs database.Database
-	Group        repository.Group
+	Registry     repository.Registry
 	HttpClient   url.Client
 }
 
@@ -40,7 +40,7 @@ func NewInstallWorkflow(config InstallWorkflowConfig) *InstallWorkflow {
 		tmpPath:      config.TmpPath,
 		pluginPath:   config.PluginPath,
 		installedVMs: config.InstalledVMs,
-		group:        config.Group,
+		registry:     config.Registry,
 		httpClient:   config.HttpClient,
 	}
 }
@@ -54,22 +54,22 @@ type InstallWorkflow struct {
 	pluginPath   string
 
 	installedVMs database.Database
-	group        repository.Group
+	registry     repository.Registry
 	httpClient   url.Client
 }
 
 func (i InstallWorkflow) Execute() error {
-	bytes, err := i.group.VMs().Get([]byte(i.plugin))
+	bytes, err := i.registry.VMs().Get([]byte(i.plugin))
 	if err != nil {
 		return err
 	}
 
-	record := &repository.Plugin[*types.VM]{}
-	if err := yaml.Unmarshal(bytes, record); err != nil {
+	definition := repository.Definition[types.VM]{}
+	if err := yaml.Unmarshal(bytes, &definition); err != nil {
 		return err
 	}
 
-	vm := record.Plugin
+	vm := definition.Definition
 	archiveFile := fmt.Sprintf("%s.tar.gz", i.plugin)
 	tmpPath := filepath.Join(i.tmpPath, i.organization, i.repo)
 
@@ -133,6 +133,6 @@ func (i InstallWorkflow) Execute() error {
 		return err
 	}
 
-	fmt.Printf("Successfully installed %s@v%v.%v.%v.\n", i.name, vm.Version.Major(), vm.Version.Minor(), vm.Version.Patch())
+	fmt.Printf("Successfully installed %s@v%v.\n", i.name, vm.Version.Str)
 	return nil
 }

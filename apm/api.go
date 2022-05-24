@@ -55,7 +55,7 @@ type APM struct {
 	repositoryDB database.Database // repositories we track
 	installedVMs database.Database // vms that are currently installed
 
-	globalRegistry repository.Group // all vms and subnets able to be installed
+	globalRegistry repository.Registry // all vms and subnets able to be installed
 
 	auth http.BasicAuth
 
@@ -77,7 +77,7 @@ func New(config Config) (*APM, error) {
 		tmpPath:          filepath.Join(config.Directory, tmpDir),
 		pluginPath:       config.PluginDir,
 		db:               db,
-		globalRegistry: repository.NewPluginGroup(repository.PluginGroupConfig{
+		globalRegistry: repository.NewRegistry(repository.RegistryConfig{
 			Alias: globalPrefix,
 			DB:    db,
 		}),
@@ -154,8 +154,8 @@ func (a *APM) install(name string) error {
 		return nil
 	}
 
-	alias, plugin := util.ParseQualifiedName(name)
-	organization, repo := util.ParseAlias(alias)
+	repoAlias, plugin := util.ParseQualifiedName(name)
+	organization, repo := util.ParseAlias(repoAlias)
 
 	workflow := engine.NewInstallWorkflow(engine.InstallWorkflowConfig{
 		Name:         name,
@@ -165,8 +165,8 @@ func (a *APM) install(name string) error {
 		TmpPath:      a.tmpPath,
 		PluginPath:   a.pluginPath,
 		InstalledVMs: a.installedVMs,
-		Group: repository.NewPluginGroup(repository.PluginGroupConfig{
-			Alias: []byte(alias),
+		Registry: repository.NewRegistry(repository.RegistryConfig{
+			Alias: []byte(repoAlias),
 			DB:    a.db,
 		}),
 		HttpClient: a.httpClient,
@@ -222,7 +222,7 @@ func (a *APM) JoinSubnet(alias string) error {
 func (a *APM) joinSubnet(fullName string) error {
 	alias, plugin := util.ParseQualifiedName(fullName)
 	aliasBytes := []byte(alias)
-	repoRegistry := repository.NewPluginGroup(repository.PluginGroupConfig{
+	repoRegistry := repository.NewRegistry(repository.RegistryConfig{
 		Alias: aliasBytes,
 		DB:    a.db,
 	})
@@ -232,11 +232,11 @@ func (a *APM) joinSubnet(fullName string) error {
 		return err
 	}
 
-	record := &repository.Plugin[*types.Subnet]{}
-	if err := yaml.Unmarshal(subnetBytes, record); err != nil {
+	definition := &repository.Definition[types.Subnet]{}
+	if err := yaml.Unmarshal(subnetBytes, definition); err != nil {
 		return err
 	}
-	subnet := record.Plugin
+	subnet := definition.Definition
 
 	// TODO prompt user, add force flag
 	fmt.Printf("Installing virtual machines for subnet %s.\n", subnet.ID())
@@ -309,7 +309,7 @@ func (a *APM) Update() error {
 		}
 
 		if latestCommit == previousCommit {
-			fmt.Printf("Already at latest for %s@%s.\n", repo, previousCommit)
+			fmt.Printf("Already at latest for %s@%s.\n", repo, latestCommit)
 			continue
 		}
 
@@ -320,13 +320,18 @@ func (a *APM) Update() error {
 			AliasBytes:     aliasBytes,
 			PreviousCommit: previousCommit,
 			LatestCommit:   latestCommit,
-			RepoRegistry: repository.NewPluginGroup(repository.PluginGroupConfig{
+			RepoRegistry: repository.NewRegistry(repository.RegistryConfig{
 				Alias: aliasBytes,
 				DB:    a.db,
 			}),
 			GlobalRegistry:     a.globalRegistry,
 			RepositoryMetadata: *repositoryMetadata,
 			RepositoryDB:       a.repositoryDB,
+			InstalledVMs:       a.installedVMs,
+			DB:                 a.db,
+			TmpPath:            a.tmpPath,
+			PluginPath:         a.pluginPath,
+			HttpClient:         a.httpClient,
 		})
 
 		if err := a.engine.Execute(workflow); err != nil {
@@ -396,7 +401,7 @@ func (a *APM) removeRepository(name string) error {
 	//TODO don't let people remove core
 	aliasBytes := []byte(name)
 
-	repoRegistry := repository.NewPluginGroup(repository.PluginGroupConfig{
+	repoRegistry := repository.NewRegistry(repository.RegistryConfig{
 		Alias: aliasBytes,
 		DB:    a.db,
 	})
@@ -448,7 +453,7 @@ func getFullNameForAlias(db database.Database, alias string) (string, error) {
 		return "", err
 	}
 
-	registry := &repository.Registry{}
+	registry := &repository.List{}
 	if err := yaml.Unmarshal(bytes, registry); err != nil {
 		return "", err
 	}

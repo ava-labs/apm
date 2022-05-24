@@ -1,10 +1,8 @@
 package types
 
-import (
-	"github.com/ava-labs/avalanchego/subnets"
-)
+import "github.com/ava-labs/avalanchego/subnets"
 
-var _ Plugin = &Subnet{}
+var _ Definition = &Subnet{}
 
 type Subnet struct {
 	ID_          string               `yaml:"id"`
@@ -16,22 +14,22 @@ type Subnet struct {
 	Config_      subnets.SubnetConfig `yaml:"config"`
 }
 
-func (s *Subnet) ID() string {
+func (s Subnet) ID() string {
 	return s.ID_
 }
 
-func (s *Subnet) Alias() string {
+func (s Subnet) Alias() string {
 	return s.Alias_
 }
 
-func (s *Subnet) Homepage() string {
+func (s Subnet) Homepage() string {
 	return s.Homepage_
 }
 
-func (s *Subnet) Description() string {
+func (s Subnet) Description() string {
 	return s.Description_
 }
 
-func (s *Subnet) Maintainers() []string {
+func (s Subnet) Maintainers() []string {
 	return s.Maintainers_
 }
