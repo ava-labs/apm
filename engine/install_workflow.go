@@ -80,6 +80,7 @@ func (i InstallWorkflow) Execute() error {
 
 	// Download the .tar.gz file from the url
 	if err := i.httpClient.Download(filepath.Join(tmpPath, archiveFile), vm.URL); err != nil {
+		//TODO sometimes these aren't cleaned up if we fail before cleanup step
 		return err
 	}
 
