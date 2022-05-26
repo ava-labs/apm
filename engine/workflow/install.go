@@ -1,4 +1,4 @@
-package engine
+package workflow
 
 import (
 	"errors"
@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ava-labs/apm/repository"
+	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
 	"github.com/ava-labs/apm/url"
 )
@@ -64,7 +65,7 @@ func (i InstallWorkflow) Execute() error {
 		return err
 	}
 
-	definition := repository.Definition[types.VM]{}
+	definition := storage.Definition[types.VM]{}
 	if err := yaml.Unmarshal(bytes, &definition); err != nil {
 		return err
 	}

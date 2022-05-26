@@ -32,7 +32,7 @@ func NewRemote(url string, path string, reference plumbing.ReferenceName, auth *
 			return nil, err
 		}
 		if err := worktree.Pull(
-			//TODO use fetch + checkout instead of pull
+			//ODO use fetch + checkout instead of pull
 			&git.PullOptions{
 				RemoteName:    "origin",
 				ReferenceName: reference,

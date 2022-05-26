@@ -1,4 +1,4 @@
-package engine
+package workflow
 
 import (
 	"fmt"
@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ava-labs/apm/repository"
+	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
 	"github.com/ava-labs/apm/url"
 	"github.com/ava-labs/apm/util"
@@ -23,11 +24,11 @@ var (
 	subnetKey = "subnet"
 	vmKey     = "vm"
 
-	_ Workflow = &UpdateWorkflow{}
+	_ Workflow = &UpdateRepository{}
 )
 
-type UpdateWorkflowConfig struct {
-	Engine         Engine
+type UpdateRepositoryConfig struct {
+	Executor       Executor
 	RepoName       string
 	RepositoryPath string
 
@@ -39,9 +40,9 @@ type UpdateWorkflowConfig struct {
 	RepoRegistry   repository.Registry
 	GlobalRegistry repository.Registry
 
-	RepositoryMetadata repository.Metadata
+	SourceInfo storage.SourceInfo
+	SourceList storage.Storage[storage.SourceInfo]
 
-	RepositoryDB database.Database
 	InstalledVMs database.Database
 	DB           database.Database
 
@@ -50,9 +51,9 @@ type UpdateWorkflowConfig struct {
 	HttpClient url.Client
 }
 
-func NewUpdateWorkflow(config UpdateWorkflowConfig) *UpdateWorkflow {
-	return &UpdateWorkflow{
-		engine:             config.Engine,
+func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
+	return &UpdateRepository{
+		executor:           config.Executor,
 		repoName:           config.RepoName,
 		repositoryPath:     config.RepositoryPath,
 		aliasBytes:         config.AliasBytes,
@@ -60,9 +61,9 @@ func NewUpdateWorkflow(config UpdateWorkflowConfig) *UpdateWorkflow {
 		latestCommit:       config.LatestCommit,
 		repoRegistry:       config.RepoRegistry,
 		globalRegistry:     config.GlobalRegistry,
-		repositoryMetadata: config.RepositoryMetadata,
+		repositoryMetadata: config.SourceInfo,
 		installedVMs:       config.InstalledVMs,
-		repositoryDB:       config.RepositoryDB,
+		sourceList:         config.SourceList,
 		db:                 config.DB,
 		tmpPath:            config.TmpPath,
 		pluginPath:         config.PluginPath,
@@ -70,8 +71,8 @@ func NewUpdateWorkflow(config UpdateWorkflowConfig) *UpdateWorkflow {
 	}
 }
 
-type UpdateWorkflow struct {
-	engine         Engine
+type UpdateRepository struct {
+	executor       Executor
 	repoName       string
 	repositoryPath string
 
@@ -83,10 +84,10 @@ type UpdateWorkflow struct {
 	repoRegistry   repository.Registry
 	globalRegistry repository.Registry
 
-	repositoryMetadata repository.Metadata
+	repositoryMetadata storage.SourceInfo
 
 	installedVMs database.Database
-	repositoryDB database.Database
+	sourceList   storage.Storage[storage.SourceInfo]
 	db           database.Database
 
 	tmpPath    string
@@ -95,7 +96,7 @@ type UpdateWorkflow struct {
 	httpClient url.Client
 }
 
-func (u *UpdateWorkflow) updateVMs() error {
+func (u *UpdateRepository) updateVMs() error {
 	updated := false
 
 	itr := u.installedVMs.NewIterator()
@@ -116,7 +117,7 @@ func (u *UpdateWorkflow) updateVMs() error {
 			return err
 		}
 
-		definition := repository.Definition[types.VM]{}
+		definition := storage.Definition[types.VM]{}
 		if err := yaml.Unmarshal(recordBytes, &definition); err != nil {
 			return err
 		}
@@ -152,7 +153,7 @@ func (u *UpdateWorkflow) updateVMs() error {
 				updatedVM.Version.Minor,
 				updatedVM.Version.Patch,
 			)
-			if err := u.engine.Execute(installWorkflow); err != nil {
+			if err := u.executor.Execute(installWorkflow); err != nil {
 				return err
 			}
 
@@ -168,7 +169,7 @@ func (u *UpdateWorkflow) updateVMs() error {
 	return nil
 }
 
-func (u *UpdateWorkflow) Execute() error {
+func (u *UpdateRepository) Execute() error {
 	if err := u.updateDefinitions(); err != nil {
 		fmt.Printf("Unexpected error while updating definitions. %s", err)
 		return err
@@ -180,16 +181,12 @@ func (u *UpdateWorkflow) Execute() error {
 	}
 
 	// checkpoint progress
-	updatedMetadata := repository.Metadata{
+	updatedMetadata := storage.SourceInfo{
 		Alias:  u.repositoryMetadata.Alias,
 		URL:    u.repositoryMetadata.URL,
 		Commit: u.latestCommit,
 	}
-	updatedMetadataBytes, err := yaml.Marshal(updatedMetadata)
-	if err != nil {
-		return err
-	}
-	if err := u.repositoryDB.Put(u.aliasBytes, updatedMetadataBytes); err != nil {
+	if err := u.sourceList.Put(u.aliasBytes, updatedMetadata); err != nil {
 		return err
 	}
 
@@ -198,7 +195,7 @@ func (u *UpdateWorkflow) Execute() error {
 	return nil
 }
 
-func (u *UpdateWorkflow) updateDefinitions() error {
+func (u *UpdateRepository) updateDefinitions() error {
 	repoVMs := u.repoRegistry.VMs()
 	repoSubnets := u.repoRegistry.Subnets()
 	vmsPath := filepath.Join(u.repositoryPath, vmDir)
@@ -268,7 +265,7 @@ func loadFromYAML[T types.Definition](
 		if err := yaml.Unmarshal(fileBytes, data); err != nil {
 			return err
 		}
-		definition := &repository.Definition[T]{
+		definition := &storage.Definition[T]{
 			Definition: data[key],
 			Commit:     commit,
 		}
@@ -276,10 +273,10 @@ func loadFromYAML[T types.Definition](
 		alias := data[key].Alias()
 		aliasBytes := []byte(alias)
 
-		registry := &repository.List{}
+		registry := &storage.List{}
 		registryBytes, err := globalDB.Get(aliasBytes)
 		if err == database.ErrNotFound {
-			registry = &repository.List{
+			registry = &storage.List{
 				Repositories: []string{},
 			}
 		} else if err != nil {
@@ -324,7 +321,7 @@ func deleteStalePlugins[T types.Definition](db database.Database, latestCommit p
 	batch := db.NewBatch()
 
 	for itr.Next() {
-		definition := &repository.Definition[T]{}
+		definition := &storage.Definition[T]{}
 		if err := yaml.Unmarshal(itr.Value(), definition); err != nil {
 			return nil
 		}

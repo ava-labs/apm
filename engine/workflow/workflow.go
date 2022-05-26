@@ -1,4 +1,4 @@
-package engine
+package workflow
 
 type Workflow interface {
 	Execute() error

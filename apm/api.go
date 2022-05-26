@@ -21,8 +21,9 @@ import (
 
 	"github.com/ava-labs/apm/admin"
 	"github.com/ava-labs/apm/engine"
-	"github.com/ava-labs/apm/git"
+	"github.com/ava-labs/apm/engine/workflow"
 	"github.com/ava-labs/apm/repository"
+	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
 	"github.com/ava-labs/apm/url"
 	"github.com/ava-labs/apm/util"
@@ -33,7 +34,6 @@ var (
 	repositoryDir = "repositories"
 	tmpDir        = "tmp"
 
-	repoPrefix         = []byte("repo")
 	vmPrefix           = []byte("vm")
 	installedVMsPrefix = []byte("installed_vms")
 	globalPrefix       = []byte("global")
@@ -51,8 +51,9 @@ type APM struct {
 	tmpPath          string
 	pluginPath       string
 
+	sourcesList storage.Storage[storage.SourceInfo]
+
 	db           database.Database // base db
-	repositoryDB database.Database // repositories we track
 	installedVMs database.Database // vms that are currently installed
 
 	globalRegistry repository.Registry // all vms and subnets able to be installed
@@ -62,7 +63,7 @@ type APM struct {
 	adminClient admin.Client
 	httpClient  url.Client
 
-	engine engine.Engine
+	engine workflow.Executor
 }
 
 func New(config Config) (*APM, error) {
@@ -81,7 +82,11 @@ func New(config Config) (*APM, error) {
 			Alias: globalPrefix,
 			DB:    db,
 		}),
-		repositoryDB: prefixdb.New(repoPrefix, db),
+		sourcesList: storage.NewSourceDB(
+			storage.SourceDBConfig{
+				DB: db,
+			},
+		),
 		installedVMs: prefixdb.New(installedVMsPrefix, db),
 		auth:         config.Auth,
 		adminClient: admin.NewHttpClient(
@@ -99,14 +104,14 @@ func New(config Config) (*APM, error) {
 
 	//TODO simplify this
 	coreKey := []byte(core.Alias)
-	if _, err = a.repositoryDB.Get(coreKey); err == database.ErrNotFound {
+	if _, err = a.sourcesList.Get(coreKey); err == database.ErrNotFound {
 		err := a.AddRepository(core.Alias, core.URL)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	repoMetadata, err := a.repositoryMetadataFor(coreKey)
+	repoMetadata, err := a.sourcesList.Get(coreKey)
 	if err != nil {
 		return nil, err
 	}
@@ -157,7 +162,7 @@ func (a *APM) install(name string) error {
 	repoAlias, plugin := util.ParseQualifiedName(name)
 	organization, repo := util.ParseAlias(repoAlias)
 
-	workflow := engine.NewInstallWorkflow(engine.InstallWorkflowConfig{
+	workflow := workflow.NewInstallWorkflow(workflow.InstallWorkflowConfig{
 		Name:         name,
 		Plugin:       plugin,
 		Organization: organization,
@@ -232,7 +237,7 @@ func (a *APM) joinSubnet(fullName string) error {
 		return err
 	}
 
-	definition := &repository.Definition[types.Subnet]{}
+	definition := &storage.Definition[types.Subnet]{}
 	if err := yaml.Unmarshal(subnetBytes, definition); err != nil {
 		return err
 	}
@@ -286,97 +291,45 @@ func (a *APM) info(fullName string) error {
 }
 
 func (a *APM) Update() error {
-	itr := a.repositoryDB.NewIterator()
+	workflow := workflow.NewUpdate(workflow.UpdateConfig{
+		Executor:         a.engine,
+		GlobalRegistry:   a.globalRegistry,
+		InstalledVMs:     a.installedVMs,
+		DB:               a.db,
+		TmpPath:          a.tmpPath,
+		PluginPath:       a.pluginPath,
+		HttpClient:       a.httpClient,
+		SourceList:       a.sourcesList,
+		RepositoriesPath: a.repositoriesPath,
+		Auth:             a.auth,
+	})
 
-	for itr.Next() {
-		aliasBytes := itr.Key()
-		organization, repo := util.ParseAlias(string(aliasBytes))
-
-		repositoryMetadata, err := a.repositoryMetadataFor(aliasBytes)
-		if err != nil {
-			return err
-		}
-		repositoryPath := filepath.Join(a.repositoriesPath, organization, repo)
-		gitRepo, err := git.NewRemote(repositoryMetadata.URL, repositoryPath, "refs/heads/main", &a.auth)
-		if err != nil {
-			return err
-		}
-
-		previousCommit := repositoryMetadata.Commit
-		latestCommit, err := gitRepo.Head()
-		if err != nil {
-			return err
-		}
-
-		if latestCommit == previousCommit {
-			fmt.Printf("Already at latest for %s@%s.\n", repo, latestCommit)
-			continue
-		}
-
-		workflow := engine.NewUpdateWorkflow(engine.UpdateWorkflowConfig{
-			Engine:         a.engine,
-			RepoName:       repo,
-			RepositoryPath: repositoryPath,
-			AliasBytes:     aliasBytes,
-			PreviousCommit: previousCommit,
-			LatestCommit:   latestCommit,
-			RepoRegistry: repository.NewRegistry(repository.RegistryConfig{
-				Alias: aliasBytes,
-				DB:    a.db,
-			}),
-			GlobalRegistry:     a.globalRegistry,
-			RepositoryMetadata: *repositoryMetadata,
-			RepositoryDB:       a.repositoryDB,
-			InstalledVMs:       a.installedVMs,
-			DB:                 a.db,
-			TmpPath:            a.tmpPath,
-			PluginPath:         a.pluginPath,
-			HttpClient:         a.httpClient,
-		})
-
-		if err := a.engine.Execute(workflow); err != nil {
-			return err
-		}
+	if err := a.engine.Execute(workflow); err != nil {
+		return err
 	}
 
 	return nil
 }
 
-func (a *APM) repositoryMetadataFor(alias []byte) (*repository.Metadata, error) {
-	repositoryMetadataBytes, err := a.repositoryDB.Get(alias)
-	if err != nil && err != database.ErrNotFound {
-		return nil, err
-	}
-
-	repositoryMetadata := &repository.Metadata{}
-	if err := yaml.Unmarshal(repositoryMetadataBytes, repositoryMetadata); err != nil {
-		return nil, err
-	}
-
-	return repositoryMetadata, nil
-}
-
 func (a *APM) AddRepository(alias string, url string) error {
 	aliasBytes := []byte(alias)
-	ok, err := a.repositoryDB.Has(aliasBytes)
-	if err != nil {
+	sourceInfo, err := a.sourcesList.Get(aliasBytes)
+	if err != nil && err != database.ErrNotFound {
 		return err
 	}
-	if ok {
+
+	zero := storage.SourceInfo{}
+	if sourceInfo != zero {
 		fmt.Printf("%s is already registered as a repository.\n", alias)
 		return nil
 	}
 
-	metadata := repository.Metadata{
+	metadata := storage.SourceInfo{
 		Alias:  alias,
 		URL:    url,
 		Commit: plumbing.ZeroHash, // hasn't been synced yet
 	}
-	metadataBytes, err := yaml.Marshal(metadata)
-	if err != nil {
-		return err
-	}
-	return a.repositoryDB.Put(aliasBytes, metadataBytes)
+	return a.sourcesList.Put(aliasBytes, metadata)
 }
 
 func (a *APM) RemoveRepository(alias string) error {
@@ -422,16 +375,16 @@ func (a *APM) removeRepository(name string) error {
 	}
 
 	// remove it from our list of tracked repositories
-	return a.repositoryDB.Delete(aliasBytes)
+	return a.sourcesList.Delete(aliasBytes)
 }
 
 func (a *APM) ListRepositories() error {
-	itr := a.repositoryDB.NewIterator()
+	itr := a.sourcesList.Iterator()
 
 	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
 	fmt.Fprintln(w, "alias\turl")
 	for itr.Next() {
-		metadata := &repository.Metadata{}
+		metadata := &storage.SourceInfo{}
 		if err := yaml.Unmarshal(itr.Value(), metadata); err != nil {
 			return err
 		}
@@ -453,7 +406,7 @@ func getFullNameForAlias(db database.Database, alias string) (string, error) {
 		return "", err
 	}
 
-	registry := &repository.List{}
+	registry := &storage.List{}
 	if err := yaml.Unmarshal(bytes, registry); err != nil {
 		return "", err
 	}

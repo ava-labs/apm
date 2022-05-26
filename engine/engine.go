@@ -1,10 +1,8 @@
 package engine
 
-var _ Engine = &WorkflowEngine{}
+import "github.com/ava-labs/apm/engine/workflow"
 
-type Engine interface {
-	Execute(workflow Workflow) error
-}
+var _ workflow.Executor = &WorkflowEngine{}
 
 func NewWorkflowEngine() *WorkflowEngine {
 	return &WorkflowEngine{}
@@ -13,6 +11,6 @@ func NewWorkflowEngine() *WorkflowEngine {
 type WorkflowEngine struct {
 }
 
-func (w WorkflowEngine) Execute(workflow Workflow) error {
+func (w WorkflowEngine) Execute(workflow workflow.Workflow) error {
 	return workflow.Execute()
 }
