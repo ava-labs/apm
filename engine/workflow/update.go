@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 
 	"github.com/ava-labs/avalanchego/database"
+	"github.com/ava-labs/avalanchego/version"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 
 	"github.com/ava-labs/apm/git"
-	"github.com/ava-labs/apm/repository"
 	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/url"
 	"github.com/ava-labs/apm/util"
@@ -18,8 +18,8 @@ var _ Workflow = &Update{}
 
 type UpdateConfig struct {
 	Executor         Executor
-	GlobalRegistry   repository.Registry
-	InstalledVMs     database.Database
+	Registry         storage.Storage[storage.RepoList]
+	InstalledVMs     storage.Storage[version.Semantic]
 	DB               database.Database
 	TmpPath          string
 	PluginPath       string
@@ -32,7 +32,7 @@ type UpdateConfig struct {
 func NewUpdate(config UpdateConfig) *Update {
 	return &Update{
 		executor:         config.Executor,
-		globalRegistry:   config.GlobalRegistry,
+		registry:         config.Registry,
 		installedVMs:     config.InstalledVMs,
 		db:               config.DB,
 		tmpPath:          config.TmpPath,
@@ -46,15 +46,15 @@ func NewUpdate(config UpdateConfig) *Update {
 
 type Update struct {
 	executor         Executor
-	globalRegistry   repository.Registry
-	installedVMs     database.Database
 	db               database.Database
+	registry         storage.Storage[storage.RepoList]
+	installedVMs     storage.Storage[version.Semantic]
+	sourceList       storage.Storage[storage.SourceInfo]
+	httpClient       url.Client
+	auth             http.BasicAuth
 	tmpPath          string
 	pluginPath       string
-	httpClient       url.Client
-	sourceList       storage.Storage[storage.SourceInfo]
 	repositoriesPath string
-	auth             http.BasicAuth
 }
 
 func (u Update) Execute() error {
@@ -64,7 +64,7 @@ func (u Update) Execute() error {
 		aliasBytes := itr.Key()
 		organization, repo := util.ParseAlias(string(aliasBytes))
 
-		sourceInfo, err := u.sourceList.Get(aliasBytes)
+		sourceInfo, err := itr.Value()
 		if err != nil {
 			return err
 		}
@@ -92,18 +92,18 @@ func (u Update) Execute() error {
 			AliasBytes:     aliasBytes,
 			PreviousCommit: previousCommit,
 			LatestCommit:   latestCommit,
-			RepoRegistry: repository.NewRegistry(repository.RegistryConfig{
+			Repository: storage.NewRepository(storage.RepositoryConfig{
 				Alias: aliasBytes,
 				DB:    u.db,
 			}),
-			GlobalRegistry: u.globalRegistry,
-			SourceInfo:     sourceInfo,
-			SourceList:     u.sourceList,
-			InstalledVMs:   u.installedVMs,
-			DB:             u.db,
-			TmpPath:        u.tmpPath,
-			PluginPath:     u.pluginPath,
-			HttpClient:     u.httpClient,
+			Registry:     u.registry,
+			SourceInfo:   sourceInfo,
+			SourceList:   u.sourceList,
+			InstalledVMs: u.installedVMs,
+			DB:           u.db,
+			TmpPath:      u.tmpPath,
+			PluginPath:   u.pluginPath,
+			HttpClient:   u.httpClient,
 		})
 
 		if err := u.executor.Execute(workflow); err != nil {

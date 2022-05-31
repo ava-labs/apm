@@ -7,11 +7,9 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/utils/perms"
-	"gopkg.in/yaml.v3"
+	"github.com/ava-labs/avalanchego/version"
 
-	"github.com/ava-labs/apm/repository"
 	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
 	"github.com/ava-labs/apm/url"
@@ -27,8 +25,8 @@ type InstallWorkflowConfig struct {
 	TmpPath      string
 	PluginPath   string
 
-	InstalledVMs database.Database
-	Registry     repository.Registry
+	InstalledVMs storage.Storage[version.Semantic]
+	VMStorage    storage.Storage[storage.Definition[types.VM]]
 	HttpClient   url.Client
 }
 
@@ -41,7 +39,7 @@ func NewInstallWorkflow(config InstallWorkflowConfig) *InstallWorkflow {
 		tmpPath:      config.TmpPath,
 		pluginPath:   config.PluginPath,
 		installedVMs: config.InstalledVMs,
-		registry:     config.Registry,
+		vmStorage:    config.VMStorage,
 		httpClient:   config.HttpClient,
 	}
 }
@@ -54,23 +52,24 @@ type InstallWorkflow struct {
 	tmpPath      string
 	pluginPath   string
 
-	installedVMs database.Database
-	registry     repository.Registry
+	installedVMs storage.Storage[version.Semantic]
+	vmStorage    storage.Storage[storage.Definition[types.VM]]
 	httpClient   url.Client
 }
 
 func (i InstallWorkflow) Execute() error {
-	bytes, err := i.registry.VMs().Get([]byte(i.plugin))
+	var (
+		definition storage.Definition[types.VM] // TODO fix this weird hack
+		err        error
+	)
+
+	definition, err = i.vmStorage.Get([]byte(i.plugin))
 	if err != nil {
 		return err
 	}
 
-	definition := storage.Definition[types.VM]{}
-	if err := yaml.Unmarshal(bytes, &definition); err != nil {
-		return err
-	}
-
 	vm := definition.Definition
+
 	archiveFile := fmt.Sprintf("%s.tar.gz", i.plugin)
 	tmpPath := filepath.Join(i.tmpPath, i.organization, i.repo)
 
@@ -127,11 +126,7 @@ func (i InstallWorkflow) Execute() error {
 	}
 
 	fmt.Printf("Adding virtual machine %s to installation registry...\n", vm.ID_)
-	installedVersion, err := yaml.Marshal(vm.Version)
-	if err != nil {
-		return err
-	}
-	if err := i.installedVMs.Put([]byte(i.name), installedVersion); err != nil {
+	if err := i.installedVMs.Put([]byte(i.name), vm.Version); err != nil {
 		return err
 	}
 

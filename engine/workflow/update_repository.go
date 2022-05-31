@@ -10,7 +10,6 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"gopkg.in/yaml.v3"
 
-	"github.com/ava-labs/apm/repository"
 	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
 	"github.com/ava-labs/apm/url"
@@ -37,14 +36,13 @@ type UpdateRepositoryConfig struct {
 	PreviousCommit plumbing.Hash
 	LatestCommit   plumbing.Hash
 
-	RepoRegistry   repository.Registry
-	GlobalRegistry repository.Registry
+	SourceInfo   storage.SourceInfo
+	Repository   storage.Repository
+	Registry     storage.Storage[storage.RepoList]
+	SourceList   storage.Storage[storage.SourceInfo]
+	InstalledVMs storage.Storage[version.Semantic]
 
-	SourceInfo storage.SourceInfo
-	SourceList storage.Storage[storage.SourceInfo]
-
-	InstalledVMs database.Database
-	DB           database.Database
+	DB database.Database
 
 	TmpPath    string
 	PluginPath string
@@ -59,8 +57,8 @@ func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
 		aliasBytes:         config.AliasBytes,
 		previousCommit:     config.PreviousCommit,
 		latestCommit:       config.LatestCommit,
-		repoRegistry:       config.RepoRegistry,
-		globalRegistry:     config.GlobalRegistry,
+		repository:         config.Repository,
+		registry:           config.Registry,
 		repositoryMetadata: config.SourceInfo,
 		installedVMs:       config.InstalledVMs,
 		sourceList:         config.SourceList,
@@ -81,12 +79,12 @@ type UpdateRepository struct {
 	previousCommit plumbing.Hash
 	latestCommit   plumbing.Hash
 
-	repoRegistry   repository.Registry
-	globalRegistry repository.Registry
+	repository storage.Repository
+	registry   storage.Storage[storage.RepoList]
 
 	repositoryMetadata storage.SourceInfo
 
-	installedVMs database.Database
+	installedVMs storage.Storage[version.Semantic]
 	sourceList   storage.Storage[storage.SourceInfo]
 	db           database.Database
 
@@ -99,12 +97,12 @@ type UpdateRepository struct {
 func (u *UpdateRepository) updateVMs() error {
 	updated := false
 
-	itr := u.installedVMs.NewIterator()
+	itr := u.installedVMs.Iterator()
+	defer itr.Release()
 
 	for itr.Next() {
 		fullVMName := string(itr.Key())
-		installedVersion := version.Semantic{}
-		err := yaml.Unmarshal(itr.Value(), &installedVersion)
+		installedVersion, err := itr.Value()
 		if err != nil {
 			return err
 		}
@@ -112,15 +110,15 @@ func (u *UpdateRepository) updateVMs() error {
 		repoAlias, vmName := util.ParseQualifiedName(fullVMName)
 		organization, repo := util.ParseAlias(repoAlias)
 
-		recordBytes, err := u.repoRegistry.VMs().Get([]byte(vmName))
+		// weird hack for generics to make the go compiler happy.
+		var definition storage.Definition[types.VM]
+
+		vmStorage := u.repository.VMs()
+		definition, err = vmStorage.Get([]byte(vmName))
 		if err != nil {
 			return err
 		}
 
-		definition := storage.Definition[types.VM]{}
-		if err := yaml.Unmarshal(recordBytes, &definition); err != nil {
-			return err
-		}
 		updatedVM := definition.Definition
 
 		if installedVersion.Compare(updatedVM.Version) < 0 {
@@ -142,7 +140,7 @@ func (u *UpdateRepository) updateVMs() error {
 				TmpPath:      u.tmpPath,
 				PluginPath:   u.pluginPath,
 				InstalledVMs: u.installedVMs,
-				Registry:     u.repoRegistry,
+				VMStorage:    u.repository.VMs(),
 				HttpClient:   u.httpClient,
 			})
 
@@ -196,24 +194,22 @@ func (u *UpdateRepository) Execute() error {
 }
 
 func (u *UpdateRepository) updateDefinitions() error {
-	repoVMs := u.repoRegistry.VMs()
-	repoSubnets := u.repoRegistry.Subnets()
 	vmsPath := filepath.Join(u.repositoryPath, vmDir)
 
-	if err := loadFromYAML[types.VM](vmKey, vmsPath, u.aliasBytes, u.latestCommit, u.globalRegistry.VMs(), repoVMs); err != nil {
+	if err := loadFromYAML[types.VM](vmKey, vmsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.VMs()); err != nil {
 		return err
 	}
 
 	subnetsPath := filepath.Join(u.repositoryPath, subnetDir)
-	if err := loadFromYAML[types.Subnet](subnetKey, subnetsPath, u.aliasBytes, u.latestCommit, u.globalRegistry.Subnets(), repoSubnets); err != nil {
+	if err := loadFromYAML[types.Subnet](subnetKey, subnetsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.Subnets()); err != nil {
 		return err
 	}
 
 	// Now we need to delete anything that wasn't updated in the latest commit
-	if err := deleteStalePlugins[types.VM](repoVMs, u.latestCommit); err != nil {
+	if err := deleteStalePlugins[types.VM](u.repository.VMs(), u.latestCommit); err != nil {
 		return err
 	}
-	if err := deleteStalePlugins[types.Subnet](repoSubnets, u.latestCommit); err != nil {
+	if err := deleteStalePlugins[types.Subnet](u.repository.Subnets(), u.latestCommit); err != nil {
 		return err
 	}
 
@@ -231,15 +227,15 @@ func loadFromYAML[T types.Definition](
 	path string,
 	repositoryAlias []byte,
 	commit plumbing.Hash,
-	globalDB database.Database,
-	repoDB database.Database,
+	globalDB storage.Storage[storage.RepoList],
+	repoDB storage.Storage[storage.Definition[T]],
 ) error {
 	files, err := os.ReadDir(path)
 	if err != nil {
 		return err
 	}
-	globalBatch := globalDB.NewBatch()
-	repoBatch := repoDB.NewBatch()
+	//globalBatch := globalDB.NewBatch()
+	//repoBatch := repoDB.NewBatch()
 
 	for _, file := range files {
 		if file.IsDir() {
@@ -265,7 +261,7 @@ func loadFromYAML[T types.Definition](
 		if err := yaml.Unmarshal(fileBytes, data); err != nil {
 			return err
 		}
-		definition := &storage.Definition[T]{
+		definition := storage.Definition[T]{
 			Definition: data[key],
 			Commit:     commit,
 		}
@@ -273,69 +269,64 @@ func loadFromYAML[T types.Definition](
 		alias := data[key].Alias()
 		aliasBytes := []byte(alias)
 
-		registry := &storage.List{}
-		registryBytes, err := globalDB.Get(aliasBytes)
+		registry := storage.RepoList{}
+		registry, err = globalDB.Get(aliasBytes)
 		if err == database.ErrNotFound {
-			registry = &storage.List{
+			registry = storage.RepoList{ //TODO check if this can be removed
 				Repositories: []string{},
 			}
 		} else if err != nil {
-			return err
-		} else if err := yaml.Unmarshal(registryBytes, registry); err != nil {
 			return err
 		}
 
 		registry.Repositories = append(registry.Repositories, string(repositoryAlias))
 
-		updatedRegistryBytes, err := yaml.Marshal(registry)
-		if err != nil {
-			return err
-		}
-		updatedRecordBytes, err := yaml.Marshal(definition)
-		if err != nil {
-			return err
-		}
+		//updatedRegistryBytes, err := yaml.Marshal(registry)
+		//if err != nil {
+		//	return err
+		//}
+		//updatedRecordBytes, err := yaml.Marshal(definition)
+		//if err != nil {
+		//	return err
+		//}
 
-		if err := globalBatch.Put(aliasBytes, updatedRegistryBytes); err != nil {
+		if err := globalDB.Put(aliasBytes, registry); err != nil {
 			return err
 		}
-		if err := repoBatch.Put(aliasBytes, updatedRecordBytes); err != nil {
+		if err := repoDB.Put(aliasBytes, definition); err != nil {
 			return err
 		}
 
 		fmt.Printf("Updated plugin definition in registry for %s:%s@%s.\n", repositoryAlias, alias, commit)
 	}
 
-	if err := globalBatch.Write(); err != nil {
-		return err
-	}
-	if err := repoBatch.Write(); err != nil {
-		return err
-	}
-
+	//if err := globalBatch.Write(); err != nil {
+	//	return err
+	//}
+	//if err := repoBatch.Write(); err != nil {
+	//	return err
+	//}
+	//
 	return nil
 }
 
-func deleteStalePlugins[T types.Definition](db database.Database, latestCommit plumbing.Hash) error {
-	itr := db.NewIterator()
-	batch := db.NewBatch()
+func deleteStalePlugins[T types.Definition](db storage.Storage[storage.Definition[T]], latestCommit plumbing.Hash) error {
+	itr := db.Iterator()
+	//TODO batching
 
 	for itr.Next() {
-		definition := &storage.Definition[T]{}
-		if err := yaml.Unmarshal(itr.Value(), definition); err != nil {
-			return nil
+		definition, err := itr.Value()
+		if err != nil {
+			return err
 		}
 
 		if definition.Commit != latestCommit {
 			fmt.Printf("Deleting a stale plugin: %s@%s as of %s.\n", definition.Definition.Alias(), definition.Commit, latestCommit)
-			if err := batch.Delete(itr.Key()); err != nil {
+			if err := db.Delete(itr.Key()); err != nil {
 				return err
 			}
 		}
 	}
 
-	if err := batch.Write(); err != nil {
-		return err
-	}
 	return nil
 }

@@ -13,9 +13,9 @@ type SourceInfo struct {
 	Commit plumbing.Hash `yaml:"commit"`
 }
 
-// List is a list of repositories that support a single plugin alias.
+// RepoList is a list of repositories that support a single plugin alias.
 // e.g. foo/plugin, bar/plugin => plugin: [foo, bar]
-type List struct {
+type RepoList struct {
 	Repositories []string `yaml:"repositories"`
 }
 

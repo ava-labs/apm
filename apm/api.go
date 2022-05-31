@@ -8,21 +8,19 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"github.com/ava-labs/avalanche-plugins-core/core"
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/leveldb"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/perms"
+	"github.com/ava-labs/avalanchego/version"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
-	"gopkg.in/yaml.v3"
-
-	"github.com/ava-labs/avalanche-plugins-core/core"
 
 	"github.com/ava-labs/apm/admin"
 	"github.com/ava-labs/apm/engine"
 	"github.com/ava-labs/apm/engine/workflow"
-	"github.com/ava-labs/apm/repository"
 	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
 	"github.com/ava-labs/apm/url"
@@ -34,9 +32,7 @@ var (
 	repositoryDir = "repositories"
 	tmpDir        = "tmp"
 
-	vmPrefix           = []byte("vm")
-	installedVMsPrefix = []byte("installed_vms")
-	globalPrefix       = []byte("global")
+	vmPrefix = []byte("vm")
 )
 
 type Config struct {
@@ -47,23 +43,22 @@ type Config struct {
 }
 
 type APM struct {
-	repositoriesPath string
-	tmpPath          string
-	pluginPath       string
+	db database.Database
 
-	sourcesList storage.Storage[storage.SourceInfo]
+	sourcesList  storage.Storage[storage.SourceInfo]
+	installedVMs storage.Storage[version.Semantic]
+	registry     storage.Storage[storage.RepoList]
 
-	db           database.Database // base db
-	installedVMs database.Database // vms that are currently installed
-
-	globalRegistry repository.Registry // all vms and subnets able to be installed
+	engine workflow.Executor
 
 	auth http.BasicAuth
 
 	adminClient admin.Client
 	httpClient  url.Client
 
-	engine workflow.Executor
+	repositoriesPath string
+	tmpPath          string
+	pluginPath       string
 }
 
 func New(config Config) (*APM, error) {
@@ -78,17 +73,10 @@ func New(config Config) (*APM, error) {
 		tmpPath:          filepath.Join(config.Directory, tmpDir),
 		pluginPath:       config.PluginDir,
 		db:               db,
-		globalRegistry: repository.NewRegistry(repository.RegistryConfig{
-			Alias: globalPrefix,
-			DB:    db,
-		}),
-		sourcesList: storage.NewSourceDB(
-			storage.SourceDBConfig{
-				DB: db,
-			},
-		),
-		installedVMs: prefixdb.New(installedVMsPrefix, db),
-		auth:         config.Auth,
+		registry:         storage.NewRegistry(db),
+		sourcesList:      storage.NewSourceInfo(db),
+		installedVMs:     storage.NewInstalledVMs(db),
+		auth:             config.Auth,
 		adminClient: admin.NewHttpClient(
 			admin.HttpClientConfig{
 				Endpoint: fmt.Sprintf("http://%s", config.AdminApiEndpoint),
@@ -102,9 +90,11 @@ func New(config Config) (*APM, error) {
 		return nil, err
 	}
 
-	//TODO simplify this
+	// TODO simplify this
 	coreKey := []byte(core.Alias)
-	if _, err = a.sourcesList.Get(coreKey); err == database.ErrNotFound {
+	if ok, err := a.sourcesList.Has(coreKey); err != nil {
+		return nil, err
+	} else if !ok {
 		err := a.AddRepository(core.Alias, core.URL)
 		if err != nil {
 			return nil, err
@@ -128,12 +118,12 @@ func New(config Config) (*APM, error) {
 	return a, nil
 }
 
-func parseAndRun(alias string, globalRegistry database.Database, command func(string) error) error {
+func parseAndRun(alias string, registry storage.Storage[storage.RepoList], command func(string) error) error {
 	if qualifiedName(alias) {
 		return command(alias)
 	}
 
-	fullName, err := getFullNameForAlias(globalRegistry, alias)
+	fullName, err := getFullNameForAlias(registry, alias)
 	if err != nil {
 		return err
 	}
@@ -143,7 +133,7 @@ func parseAndRun(alias string, globalRegistry database.Database, command func(st
 }
 
 func (a *APM) Install(alias string) error {
-	return parseAndRun(alias, a.globalRegistry.VMs(), a.install)
+	return parseAndRun(alias, a.registry, a.install)
 }
 
 func (a *APM) install(name string) error {
@@ -170,10 +160,10 @@ func (a *APM) install(name string) error {
 		TmpPath:      a.tmpPath,
 		PluginPath:   a.pluginPath,
 		InstalledVMs: a.installedVMs,
-		Registry: repository.NewRegistry(repository.RegistryConfig{
+		VMStorage: storage.NewRepository(storage.RepositoryConfig{
 			Alias: []byte(repoAlias),
 			DB:    a.db,
-		}),
+		}).VMs(),
 		HttpClient: a.httpClient,
 	})
 
@@ -181,7 +171,7 @@ func (a *APM) install(name string) error {
 }
 
 func (a *APM) Uninstall(alias string) error {
-	return parseAndRun(alias, a.globalRegistry.VMs(), a.uninstall)
+	return parseAndRun(alias, a.registry, a.uninstall)
 }
 
 func (a *APM) uninstall(name string) error {
@@ -221,26 +211,32 @@ func (a *APM) uninstall(name string) error {
 }
 
 func (a *APM) JoinSubnet(alias string) error {
-	return parseAndRun(alias, a.globalRegistry.Subnets(), a.joinSubnet)
+	return parseAndRun(alias, a.registry, a.joinSubnet)
 }
 
 func (a *APM) joinSubnet(fullName string) error {
 	alias, plugin := util.ParseQualifiedName(fullName)
 	aliasBytes := []byte(alias)
-	repoRegistry := repository.NewRegistry(repository.RegistryConfig{
+	repoRegistry := storage.NewRepository(storage.RepositoryConfig{
 		Alias: aliasBytes,
 		DB:    a.db,
 	})
 
-	subnetBytes, err := repoRegistry.Subnets().Get([]byte(plugin))
+	var (
+		// weird hack for generics
+		definition storage.Definition[types.Subnet]
+		err        error
+	)
+
+	definition, err = repoRegistry.Subnets().Get([]byte(plugin))
 	if err != nil {
 		return err
 	}
 
-	definition := &storage.Definition[types.Subnet]{}
-	if err := yaml.Unmarshal(subnetBytes, definition); err != nil {
-		return err
-	}
+	// definition := &storage.Definition[types.Subnet]{}
+	// if err := yaml.Unmarshal(subnetBytes, definition); err != nil {
+	//	return err
+	// }
 	subnet := definition.Definition
 
 	// TODO prompt user, add force flag
@@ -278,7 +274,7 @@ func (a *APM) Info(alias string) error {
 		return a.install(alias)
 	}
 
-	fullName, err := getFullNameForAlias(a.globalRegistry.VMs(), alias)
+	fullName, err := getFullNameForAlias(a.registry, alias)
 	if err != nil {
 		return err
 	}
@@ -293,7 +289,7 @@ func (a *APM) info(fullName string) error {
 func (a *APM) Update() error {
 	workflow := workflow.NewUpdate(workflow.UpdateConfig{
 		Executor:         a.engine,
-		GlobalRegistry:   a.globalRegistry,
+		Registry:         a.registry,
 		InstalledVMs:     a.installedVMs,
 		DB:               a.db,
 		TmpPath:          a.tmpPath,
@@ -313,23 +309,20 @@ func (a *APM) Update() error {
 
 func (a *APM) AddRepository(alias string, url string) error {
 	aliasBytes := []byte(alias)
-	sourceInfo, err := a.sourcesList.Get(aliasBytes)
-	if err != nil && err != database.ErrNotFound {
-		return err
-	}
 
-	zero := storage.SourceInfo{}
-	if sourceInfo != zero {
+	if ok, err := a.sourcesList.Has(aliasBytes); err != nil {
+		return err
+	} else if ok {
 		fmt.Printf("%s is already registered as a repository.\n", alias)
 		return nil
 	}
 
-	metadata := storage.SourceInfo{
+	unsynced := storage.SourceInfo{
 		Alias:  alias,
 		URL:    url,
 		Commit: plumbing.ZeroHash, // hasn't been synced yet
 	}
-	return a.sourcesList.Put(aliasBytes, metadata)
+	return a.sourcesList.Put(aliasBytes, unsynced)
 }
 
 func (a *APM) RemoveRepository(alias string) error {
@@ -337,7 +330,7 @@ func (a *APM) RemoveRepository(alias string) error {
 		return a.removeRepository(alias)
 	}
 
-	fullName, err := getFullNameForAlias(a.globalRegistry.VMs(), alias)
+	fullName, err := getFullNameForAlias(a.registry, alias)
 	if err != nil {
 		return err
 	}
@@ -351,25 +344,29 @@ func (a *APM) removeRepository(name string) error {
 		return nil
 	}
 
-	//TODO don't let people remove core
+	// TODO don't let people remove core
 	aliasBytes := []byte(name)
 
-	repoRegistry := repository.NewRegistry(repository.RegistryConfig{
+	repoRegistry := storage.NewRepository(storage.RepositoryConfig{
 		Alias: aliasBytes,
 		DB:    a.db,
 	})
 
 	// delete all the plugin definitions in the repository
-	vmItr := repoRegistry.VMs().NewIterator()
+	vmItr := repoRegistry.VMs().Iterator()
+	defer vmItr.Release()
+
 	for vmItr.Next() {
 		if err := repoRegistry.VMs().Delete(vmItr.Key()); err != nil {
 			return err
 		}
 	}
 
-	subnetItr := repoRegistry.VMs().NewIterator()
+	subnetItr := repoRegistry.Subnets().Iterator()
+	defer subnetItr.Release()
+
 	for subnetItr.Next() {
-		if err := repoRegistry.VMs().Delete(subnetItr.Key()); err != nil {
+		if err := repoRegistry.Subnets().Delete(subnetItr.Key()); err != nil {
 			return err
 		}
 	}
@@ -384,8 +381,8 @@ func (a *APM) ListRepositories() error {
 	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
 	fmt.Fprintln(w, "alias\turl")
 	for itr.Next() {
-		metadata := &storage.SourceInfo{}
-		if err := yaml.Unmarshal(itr.Value(), metadata); err != nil {
+		metadata, err := itr.Value()
+		if err != nil {
 			return err
 		}
 
@@ -400,20 +397,15 @@ func qualifiedName(name string) bool {
 	return len(parsed) > 1
 }
 
-func getFullNameForAlias(db database.Database, alias string) (string, error) {
-	bytes, err := db.Get([]byte(alias))
+func getFullNameForAlias(registry storage.Storage[storage.RepoList], alias string) (string, error) {
+	repoList, err := registry.Get([]byte(alias))
 	if err != nil {
 		return "", err
 	}
 
-	registry := &storage.List{}
-	if err := yaml.Unmarshal(bytes, registry); err != nil {
-		return "", err
+	if len(repoList.Repositories) > 1 {
+		return "", errors.New(fmt.Sprintf("more than one match found for %s. Please specify the fully qualified name. Matches: %s.\n", alias, repoList.Repositories))
 	}
 
-	if len(registry.Repositories) > 1 {
-		return "", errors.New(fmt.Sprintf("more than one match found for %s. Please specify the fully qualified name. Matches: %s.\n", alias, registry.Repositories))
-	}
-
-	return fmt.Sprintf("%s:%s", registry.Repositories[0], alias), nil
+	return fmt.Sprintf("%s:%s", repoList.Repositories[0], alias), nil
 }
