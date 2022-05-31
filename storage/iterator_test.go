@@ -97,38 +97,60 @@ func TestIterator_Value(t *testing.T) {
 		Bar int `yaml:"bar"`
 	}
 
+	// setup
+	foo := Foo{Bar: 1}
+	fooBytes, err := yaml.Marshal(foo)
+	assert.NoError(t, err)
+
 	tests := []struct {
-		name  string
-		value Foo
+		name        string
+		bytes       []byte
+		expected    Foo
+		expectedErr bool
 	}{
 		{
-			name:  "value",
-			value: Foo{Bar: 1},
+			name:        "expected",
+			bytes:       fooBytes,
+			expected:    Foo{Bar: 1},
+			expectedErr: false,
 		},
 		{
-			name:  "zero value",
-			value: Foo{},
+			name:        "zero expected",
+			bytes:       []byte{},
+			expected:    Foo{},
+			expectedErr: false,
+		},
+		{
+			name:        "error expected",
+			bytes:       []byte("asdf"),
+			expected:    Foo{},
+			expectedErr: true,
 		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			bytes, err := yaml.Marshal(test.value)
-			assert.NoError(t, err)
-
 			mockIterator := mockDatabaseIterator{}
-			mockIterator.value = bytes
+			mockIterator.value = test.bytes
 
 			itr := Iterator[Foo]{
 				itr: mockIterator,
 			}
 
 			value, err := itr.Value()
-			assert.Equal(t, test.value, value)
-			assert.NoError(t, err)
+			assert.Equal(t, test.expected, value)
+			if test.expectedErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }
 
-// No tests yet
-// func TestIterator_Release(t *testing.T) {
-// }
+func TestIterator_Release(t *testing.T) {
+	itr := Iterator[any]{
+		itr: mockDatabaseIterator{},
+	}
+
+	itr.Release()
+}
