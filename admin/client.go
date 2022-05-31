@@ -52,7 +52,7 @@ func (c *HttpClient) LoadVMs() error {
 	return err
 }
 
-//TODO handle dead node
+// TODO handle dead node
 func (c *HttpClient) WhitelistSubnet(subnetID string) error {
 	body := []byte(
 		fmt.Sprintf(
@@ -86,7 +86,7 @@ func (c *HttpClient) executeHttpRequest(body []byte) error {
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected response code %s", res.StatusCode)
+		return fmt.Errorf("unexpected response code %v", res.StatusCode)
 	}
 
 	return nil
