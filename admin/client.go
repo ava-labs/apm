@@ -41,15 +41,7 @@ func (c *HttpClient) LoadVMs() error {
 		),
 	)
 
-	err := c.executeHttpRequest(body)
-	if err != nil && strings.Contains(err.Error(), "connection refused") {
-		fmt.Printf("Node appears to be offline. Virtual machines will be registered upon node startup.")
-		// Node is offline case. This is fine, since the node will
-		// automatically register the new vms upon bootstrap.
-		return nil
-	}
-
-	return err
+	return c.executeHttpRequest(body)
 }
 
 // TODO handle dead node
@@ -72,6 +64,18 @@ func (c *HttpClient) WhitelistSubnet(subnetID string) error {
 }
 
 func (c *HttpClient) executeHttpRequest(body []byte) error {
+	err := c.sendPayload(body)
+	if err != nil && strings.Contains(err.Error(), "connection refused") {
+		fmt.Printf("Node appears to be offline. Changes will take effect upon node restart.\n")
+		// Node is offline case. This is fine, since the node will
+		// automatically register the new vms upon bootstrap.
+		return nil
+	}
+
+	return nil
+}
+
+func (c *HttpClient) sendPayload(body []byte) error {
 	request, err := http.NewRequest("POST", c.endpoint, bytes.NewBuffer(body))
 	if err != nil {
 		return err
