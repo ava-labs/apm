@@ -11,7 +11,7 @@ type Subnet struct {
 	Description_ string               `yaml:"description"`
 	Maintainers_ []string             `yaml:"maintainers"`
 	VMs_         []string             `yaml:"vms"`
-	Config_      subnets.SubnetConfig `yaml:"config"`
+	Config_      subnets.SubnetConfig `yaml:"config,omitempty"`
 }
 
 func (s Subnet) ID() string {
