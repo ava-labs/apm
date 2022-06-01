@@ -16,7 +16,7 @@ var (
 	registryPrefix     = []byte("registry")
 	installedVMsPrefix = []byte("installed_vms")
 
-	_ Storage[any] = &storage[any]{}
+	_ Storage[any] = &Database[any]{}
 )
 
 type Storage[V any] interface {
@@ -28,45 +28,45 @@ type Storage[V any] interface {
 	// TODO batching
 }
 
-func NewSourceInfo(db database.Database) Storage[SourceInfo] {
-	return &storage[SourceInfo]{
+func NewSourceInfo(db database.Database) *Database[SourceInfo] {
+	return &Database[SourceInfo]{
 		db: prefixdb.New(sourceInfoPrefix, db),
 	}
 }
 
-func NewVM(db database.Database) Storage[Definition[types.VM]] {
-	return &storage[Definition[types.VM]]{
+func NewVM(db database.Database) *Database[Definition[types.VM]] {
+	return &Database[Definition[types.VM]]{
 		db: prefixdb.New(vmPrefix, db),
 	}
 }
 
-func NewSubnet(db database.Database) Storage[Definition[types.Subnet]] {
-	return &storage[Definition[types.Subnet]]{
+func NewSubnet(db database.Database) *Database[Definition[types.Subnet]] {
+	return &Database[Definition[types.Subnet]]{
 		db: prefixdb.New(subnetPrefix, db),
 	}
 }
 
-func NewRegistry(db database.Database) Storage[RepoList] {
-	return &storage[RepoList]{
+func NewRegistry(db database.Database) *Database[RepoList] {
+	return &Database[RepoList]{
 		db: prefixdb.New(registryPrefix, db),
 	}
 }
 
-func NewInstalledVMs(db database.Database) Storage[version.Semantic] {
-	return &storage[version.Semantic]{
+func NewInstalledVMs(db database.Database) *Database[version.Semantic] {
+	return &Database[version.Semantic]{
 		db: prefixdb.New(installedVMsPrefix, db),
 	}
 }
 
-type storage[V any] struct {
+type Database[V any] struct {
 	db database.Database
 }
 
-func (c *storage[V]) Has(key []byte) (bool, error) {
+func (c *Database[V]) Has(key []byte) (bool, error) {
 	return c.db.Has(key)
 }
 
-func (c *storage[V]) Put(key []byte, value V) error {
+func (c *Database[V]) Put(key []byte, value V) error {
 	valueBytes, err := yaml.Marshal(value)
 	if err != nil {
 		return err
@@ -74,7 +74,7 @@ func (c *storage[V]) Put(key []byte, value V) error {
 	return c.db.Put(key, valueBytes)
 }
 
-func (c *storage[V]) Get(key []byte) (V, error) {
+func (c *Database[V]) Get(key []byte) (V, error) {
 	value := new(V)
 	valueBytes, err := c.db.Get(key)
 	if err != nil {
@@ -88,11 +88,11 @@ func (c *storage[V]) Get(key []byte) (V, error) {
 	return *value, nil
 }
 
-func (c *storage[V]) Delete(key []byte) error {
+func (c *Database[V]) Delete(key []byte) error {
 	return c.db.Delete(key)
 }
 
-func (c *storage[V]) Iterator() Iterator[V] {
+func (c *Database[V]) Iterator() Iterator[V] {
 	return Iterator[V]{
 		itr: c.db.NewIterator(),
 	}
