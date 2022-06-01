@@ -1,5 +1,5 @@
 # apm
-Package manager for avalanche. 
+Command-line tool to manage virtual machines and subnets for Avalanche. 
 
 ## Installation
 
