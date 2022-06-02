@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
+
+	"github.com/ava-labs/apm/storage/mocks"
 )
 
 func TestIterator_Next(t *testing.T) {
@@ -24,8 +26,8 @@ func TestIterator_Next(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			mockIterator := mockDatabaseIterator{}
-			mockIterator.next = test.next
+			mockIterator := mocks.MockDatabaseIterator{}
+			mockIterator.Next_ = test.next
 
 			itr := Iterator[any]{
 				itr: mockIterator,
@@ -52,8 +54,8 @@ func TestIterator_Error(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			mockIterator := mockDatabaseIterator{}
-			mockIterator.err = test.err
+			mockIterator := mocks.MockDatabaseIterator{}
+			mockIterator.Err_ = test.err
 
 			itr := Iterator[any]{
 				itr: mockIterator,
@@ -80,8 +82,8 @@ func TestIterator_Key(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			mockIterator := mockDatabaseIterator{}
-			mockIterator.key = test.key
+			mockIterator := mocks.MockDatabaseIterator{}
+			mockIterator.Key_ = test.key
 
 			itr := Iterator[any]{
 				itr: mockIterator,
@@ -129,8 +131,8 @@ func TestIterator_Value(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			mockIterator := mockDatabaseIterator{}
-			mockIterator.value = test.bytes
+			mockIterator := mocks.MockDatabaseIterator{}
+			mockIterator.Value_ = test.bytes
 
 			itr := Iterator[Foo]{
 				itr: mockIterator,
@@ -149,7 +151,7 @@ func TestIterator_Value(t *testing.T) {
 
 func TestIterator_Release(t *testing.T) {
 	itr := Iterator[any]{
-		itr: mockDatabaseIterator{},
+		itr: mocks.MockDatabaseIterator{},
 	}
 
 	itr.Release()
