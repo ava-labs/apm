@@ -15,7 +15,7 @@ func TestAddRepositoryExecute(t *testing.T) {
 	errWrong := fmt.Errorf("something went wrong")
 
 	type mocks struct {
-		sourceList *storage.MockStorage[storage.SourceInfo]
+		sourcesList *storage.MockStorage[storage.SourceInfo]
 	}
 	tests := []struct {
 		name    string
@@ -25,7 +25,7 @@ func TestAddRepositoryExecute(t *testing.T) {
 		{
 			name: "can't read from sources list",
 			setup: func(mocks mocks) {
-				mocks.sourceList.EXPECT().Has([]byte("alias")).Return(false, errWrong)
+				mocks.sourcesList.EXPECT().Has([]byte("alias")).Return(false, errWrong)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Equal(t, errWrong, err)
@@ -34,7 +34,7 @@ func TestAddRepositoryExecute(t *testing.T) {
 		{
 			name: "duplicate alias",
 			setup: func(mocks mocks) {
-				mocks.sourceList.EXPECT().Has([]byte("alias")).Return(true, nil)
+				mocks.sourcesList.EXPECT().Has([]byte("alias")).Return(true, nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Error(t, err)
@@ -43,8 +43,8 @@ func TestAddRepositoryExecute(t *testing.T) {
 		{
 			name: "adding to sources list fails",
 			setup: func(mocks mocks) {
-				mocks.sourceList.EXPECT().Has([]byte("alias")).Return(false, nil)
-				mocks.sourceList.EXPECT().
+				mocks.sourcesList.EXPECT().Has([]byte("alias")).Return(false, nil)
+				mocks.sourcesList.EXPECT().
 					Put(
 						[]byte("alias"),
 						storage.SourceInfo{
@@ -62,8 +62,8 @@ func TestAddRepositoryExecute(t *testing.T) {
 		{
 			name: "success",
 			setup: func(mocks mocks) {
-				mocks.sourceList.EXPECT().Has([]byte("alias")).Return(false, nil)
-				mocks.sourceList.EXPECT().
+				mocks.sourcesList.EXPECT().Has([]byte("alias")).Return(false, nil)
+				mocks.sourcesList.EXPECT().
 					Put(
 						[]byte("alias"),
 						storage.SourceInfo{
@@ -84,17 +84,17 @@ func TestAddRepositoryExecute(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
-			var sourceList *storage.MockStorage[storage.SourceInfo]
+			var sourcesList *storage.MockStorage[storage.SourceInfo]
 
-			sourceList = storage.NewMockStorage[storage.SourceInfo](ctrl)
+			sourcesList = storage.NewMockStorage[storage.SourceInfo](ctrl)
 
 			test.setup(mocks{
-				sourceList: sourceList,
+				sourcesList: sourceList,
 			})
 
 			wf := NewAddRepository(
 				AddRepositoryConfig{
-					SourceList: sourceList,
+					SourcesList: sourcesList,
 					Alias:      "alias",
 					Url:        "url",
 				},

@@ -12,26 +12,26 @@ var _ Workflow = AddRepository{}
 
 func NewAddRepository(config AddRepositoryConfig) *AddRepository {
 	return &AddRepository{
-		sourceList: config.SourceList,
+		sourcesList: config.SourcesList,
 		alias:      config.Alias,
 		url:        config.Url,
 	}
 }
 
 type AddRepositoryConfig struct {
-	SourceList storage.Storage[storage.SourceInfo]
+	SourcesList storage.Storage[storage.SourceInfo]
 	Alias, Url string
 }
 
 type AddRepository struct {
-	sourceList storage.Storage[storage.SourceInfo]
+	sourcesList storage.Storage[storage.SourceInfo]
 	alias, url string
 }
 
 func (a AddRepository) Execute() error {
 	aliasBytes := []byte(a.alias)
 
-	if ok, err := a.sourceList.Has(aliasBytes); err != nil {
+	if ok, err := a.sourcesList.Has(aliasBytes); err != nil {
 		return err
 	} else if ok {
 		return fmt.Errorf("%s is already registered as a repository.\n", a.alias)
@@ -42,5 +42,5 @@ func (a AddRepository) Execute() error {
 		URL:    a.url,
 		Commit: plumbing.ZeroHash, // hasn't been synced yet
 	}
-	return a.sourceList.Put(aliasBytes, unsynced)
+	return a.sourcesList.Put(aliasBytes, unsynced)
 }

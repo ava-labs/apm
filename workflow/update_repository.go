@@ -38,7 +38,7 @@ type UpdateRepositoryConfig struct {
 	SourceInfo   storage.SourceInfo
 	Repository   storage.Repository
 	Registry     storage.Storage[storage.RepoList]
-	SourceList   storage.Storage[storage.SourceInfo]
+	SourcesList   storage.Storage[storage.SourceInfo]
 	InstalledVMs storage.Storage[version.Semantic]
 
 	DB database.Database
@@ -60,7 +60,7 @@ func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
 		registry:           config.Registry,
 		repositoryMetadata: config.SourceInfo,
 		installedVMs:       config.InstalledVMs,
-		sourceList:         config.SourceList,
+		sourcesList:         config.SourcesList,
 		db:                 config.DB,
 		tmpPath:            config.TmpPath,
 		pluginPath:         config.PluginPath,
@@ -84,7 +84,7 @@ type UpdateRepository struct {
 	repositoryMetadata storage.SourceInfo
 
 	installedVMs storage.Storage[version.Semantic]
-	sourceList   storage.Storage[storage.SourceInfo]
+	sourcesList   storage.Storage[storage.SourceInfo]
 	db           database.Database
 
 	tmpPath    string
@@ -183,7 +183,7 @@ func (u *UpdateRepository) Execute() error {
 		URL:    u.repositoryMetadata.URL,
 		Commit: u.latestCommit,
 	}
-	if err := u.sourceList.Put(u.aliasBytes, updatedMetadata); err != nil {
+	if err := u.sourcesList.Put(u.aliasBytes, updatedMetadata); err != nil {
 		return err
 	}
 

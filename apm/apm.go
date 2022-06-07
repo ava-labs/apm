@@ -288,7 +288,7 @@ func (a *APM) Update() error {
 		TmpPath:          a.tmpPath,
 		PluginPath:       a.pluginPath,
 		Installer:        a.installer,
-		SourceList:       a.sourcesList,
+		SourcesList:       a.sourcesList,
 		RepositoriesPath: a.repositoriesPath,
 		Auth:             a.auth,
 	})
@@ -303,7 +303,7 @@ func (a *APM) Update() error {
 func (a *APM) AddRepository(alias string, url string) error {
 	wf := workflow.NewAddRepository(
 		workflow.AddRepositoryConfig{
-			SourceList: a.sourcesList,
+			SourcesList: a.sourcesList,
 			Alias:      alias,
 			Url:        url,
 		},
