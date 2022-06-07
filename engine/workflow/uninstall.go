@@ -3,12 +3,10 @@ package workflow
 import (
 	"fmt"
 
-	"github.com/ava-labs/avalanchego/database"
-	"github.com/ava-labs/avalanchego/database/prefixdb"
 	"github.com/ava-labs/avalanchego/version"
 
 	"github.com/ava-labs/apm/storage"
-	"github.com/ava-labs/apm/util"
+	"github.com/ava-labs/apm/types"
 )
 
 var _ Workflow = &Uninstall{}
@@ -16,27 +14,31 @@ var _ Workflow = &Uninstall{}
 func NewUninstall(config UninstallConfig) *Uninstall {
 	return &Uninstall{
 		name:         config.Name,
-		db:           config.DB,
+		repoAlias:    config.RepoAlias,
+		plugin:       config.Plugin,
+		vmStorage:    config.VMStorage,
 		installedVMs: config.InstalledVMs,
 	}
 }
 
 type UninstallConfig struct {
 	Name         string
-	DB           database.Database
+	Plugin       string
+	RepoAlias    string
+	VMStorage    storage.Storage[storage.Definition[types.VM]]
 	InstalledVMs storage.Storage[version.Semantic]
 }
 
 type Uninstall struct {
 	name         string
-	db           database.Database
+	plugin       string
+	repoAlias    string
+	vmStorage    storage.Storage[storage.Definition[types.VM]]
 	installedVMs storage.Storage[version.Semantic]
 }
 
 func (u Uninstall) Execute() error {
-	nameBytes := []byte(u.name)
-
-	ok, err := u.installedVMs.Has(nameBytes)
+	ok, err := u.installedVMs.Has([]byte(u.name))
 	if err != nil {
 		return err
 	}
@@ -46,25 +48,19 @@ func (u Uninstall) Execute() error {
 		return nil
 	}
 
-	alias, plugin := util.ParseQualifiedName(u.name)
-
-	repoDB := prefixdb.New([]byte(alias), u.db)
-	repoVMDB := prefixdb.New(vmPrefix, repoDB)
-
-	ok, err = repoVMDB.Has([]byte(plugin))
+	ok, err = u.vmStorage.Has([]byte(u.plugin))
 	if err != nil {
 		return err
 	}
 	if !ok {
-		fmt.Printf("Virtual machine already %s doesn't exist in the vm registry for %s.", u.name, alias)
-		return nil
+		return fmt.Errorf(fmt.Sprintf("Virtual machine %s doesn't exist under the repository for %s.", u.plugin, u.repoAlias))
 	}
 
-	if err := u.installedVMs.Delete([]byte(plugin)); err != nil {
+	if err := u.installedVMs.Delete([]byte(u.name)); err != nil {
 		return err
 	}
 
-	fmt.Printf("Successfully uninstalled %s.", u.name)
+	fmt.Printf("Successfully uninstalled %s.\n", u.name)
 
 	return nil
 }

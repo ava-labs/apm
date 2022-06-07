@@ -31,6 +31,8 @@ var (
 	dbDir         = "db"
 	repositoryDir = "repositories"
 	tmpDir        = "tmp"
+
+	vmPrefix = []byte("vm")
 )
 
 type Config struct {
@@ -158,6 +160,11 @@ func (a *APM) install(name string) error {
 	repoAlias, plugin := util.ParseQualifiedName(name)
 	organization, repo := util.ParseAlias(repoAlias)
 
+	repository := storage.NewRepository(storage.RepositoryConfig{
+		Alias: []byte(repoAlias),
+		DB:    a.db,
+	})
+
 	workflow := workflow.NewInstall(workflow.InstallConfig{
 		Name:         name,
 		Plugin:       plugin,
@@ -166,12 +173,9 @@ func (a *APM) install(name string) error {
 		TmpPath:      a.tmpPath,
 		PluginPath:   a.pluginPath,
 		InstalledVMs: a.installedVMs,
-		VMStorage: storage.NewRepository(storage.RepositoryConfig{
-			Alias: []byte(repoAlias),
-			DB:    a.db,
-		}).VMs(),
-		Fs:        a.fs,
-		Installer: a.installer,
+		VMStorage:    repository.VMs(),
+		Fs:           a.fs,
+		Installer:    a.installer,
 	})
 
 	return a.engine.Execute(workflow)
@@ -182,10 +186,19 @@ func (a *APM) Uninstall(alias string) error {
 }
 
 func (a *APM) uninstall(name string) error {
+	alias, plugin := util.ParseQualifiedName(name)
+
+	repository := storage.NewRepository(storage.RepositoryConfig{
+		Alias: []byte(alias),
+		DB:    a.db,
+	})
+
 	wf := workflow.NewUninstall(
 		workflow.UninstallConfig{
 			Name:         name,
-			DB:           a.db,
+			Plugin:       plugin,
+			RepoAlias:    alias,
+			VMStorage:    repository.VMs(),
 			InstalledVMs: a.installedVMs,
 		},
 	)
