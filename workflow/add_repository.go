@@ -34,8 +34,7 @@ func (a AddRepository) Execute() error {
 	if ok, err := a.sourceList.Has(aliasBytes); err != nil {
 		return err
 	} else if ok {
-		fmt.Printf("%s is already registered as a repository.\n", a.alias)
-		return nil
+		return fmt.Errorf("%s is already registered as a repository.\n", a.alias)
 	}
 
 	unsynced := storage.SourceInfo{
