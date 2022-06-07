@@ -20,10 +20,10 @@ var (
 )
 
 type Storage[V any] interface {
-	Has([]byte) (bool, error)
-	Put([]byte, V) error
-	Get([]byte) (V, error)
-	Delete([]byte) error
+	Has(key []byte) (bool, error)
+	Put(key []byte, value V) error
+	Get(key []byte) (V, error)
+	Delete(key []byte) error
 	Iterator() Iterator[V]
 	// TODO batching
 }

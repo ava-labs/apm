@@ -17,6 +17,7 @@ import (
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/spf13/afero"
 
 	"github.com/ava-labs/apm/admin"
 	"github.com/ava-labs/apm/engine"
@@ -54,11 +55,12 @@ type APM struct {
 	auth http.BasicAuth
 
 	adminClient admin.Client
-	httpClient  url.Client
+	installer   workflow.Installer
 
 	repositoriesPath string
 	tmpPath          string
 	pluginPath       string
+	fs               afero.Fs
 }
 
 func New(config Config) (*APM, error) {
@@ -68,7 +70,9 @@ func New(config Config) (*APM, error) {
 		return nil, err
 	}
 
-	a := &APM{
+	fs := afero.NewOsFs()
+
+	var a = &APM{
 		repositoriesPath: filepath.Join(config.Directory, repositoryDir),
 		tmpPath:          filepath.Join(config.Directory, tmpDir),
 		pluginPath:       config.PluginDir,
@@ -82,10 +86,15 @@ func New(config Config) (*APM, error) {
 				Endpoint: fmt.Sprintf("http://%s", config.AdminApiEndpoint),
 			},
 		),
-		httpClient: url.NewHttpClient(),
-		engine:     engine.NewWorkflowEngine(),
+		installer: workflow.NewVMInstaller(
+			workflow.VMInstallerConfig{
+				Fs:        fs,
+				UrlClient: url.NewHttpClient(),
+			},
+		),
+		engine: engine.NewWorkflowEngine(),
+		fs:     fs,
 	}
-
 	if err := os.MkdirAll(a.repositoriesPath, perms.ReadWriteExecute); err != nil {
 		return nil, err
 	}
@@ -164,7 +173,8 @@ func (a *APM) install(name string) error {
 			Alias: []byte(repoAlias),
 			DB:    a.db,
 		}).VMs(),
-		HttpClient: a.httpClient,
+		Fs:        a.fs,
+		Installer: a.installer,
 	})
 
 	return a.engine.Execute(workflow)
@@ -294,7 +304,7 @@ func (a *APM) Update() error {
 		DB:               a.db,
 		TmpPath:          a.tmpPath,
 		PluginPath:       a.pluginPath,
-		HttpClient:       a.httpClient,
+		Installer:        a.installer,
 		SourceList:       a.sourcesList,
 		RepositoriesPath: a.repositoriesPath,
 		Auth:             a.auth,

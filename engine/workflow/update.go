@@ -10,7 +10,6 @@ import (
 
 	"github.com/ava-labs/apm/git"
 	"github.com/ava-labs/apm/storage"
-	"github.com/ava-labs/apm/url"
 	"github.com/ava-labs/apm/util"
 )
 
@@ -23,7 +22,7 @@ type UpdateConfig struct {
 	DB               database.Database
 	TmpPath          string
 	PluginPath       string
-	HttpClient       url.Client
+	Installer        Installer
 	SourceList       storage.Storage[storage.SourceInfo]
 	RepositoriesPath string
 	Auth             http.BasicAuth
@@ -37,7 +36,7 @@ func NewUpdate(config UpdateConfig) *Update {
 		db:               config.DB,
 		tmpPath:          config.TmpPath,
 		pluginPath:       config.PluginPath,
-		httpClient:       config.HttpClient,
+		installer:        config.Installer,
 		sourceList:       config.SourceList,
 		repositoriesPath: config.RepositoriesPath,
 		auth:             config.Auth,
@@ -50,7 +49,7 @@ type Update struct {
 	registry         storage.Storage[storage.RepoList]
 	installedVMs     storage.Storage[version.Semantic]
 	sourceList       storage.Storage[storage.SourceInfo]
-	httpClient       url.Client
+	installer        Installer
 	auth             http.BasicAuth
 	tmpPath          string
 	pluginPath       string
@@ -103,7 +102,7 @@ func (u Update) Execute() error {
 			DB:           u.db,
 			TmpPath:      u.tmpPath,
 			PluginPath:   u.pluginPath,
-			HttpClient:   u.httpClient,
+			Installer:    u.installer,
 		})
 
 		if err := u.executor.Execute(workflow); err != nil {

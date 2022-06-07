@@ -11,7 +11,7 @@ import (
 var _ Client = &HttpClient{}
 
 type Client interface {
-	Download(path string, url string) error
+	Download(url string, path string) error
 }
 
 func NewHttpClient() *HttpClient {
@@ -24,7 +24,7 @@ type HttpClient struct {
 	client *grab.Client
 }
 
-func (h HttpClient) Download(path string, url string) error {
+func (h HttpClient) Download(url string, path string) error {
 	req, err := grab.NewRequest(path, url)
 	if err != nil {
 		return err

@@ -4,16 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/ava-labs/avalanchego/version"
+	"github.com/spf13/afero"
 
-	"github.com/ava-labs/apm/filesystem"
+	"github.com/ava-labs/apm/proxy/filesystem"
 	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
-	"github.com/ava-labs/apm/url"
 )
 
 var _ Workflow = &InstallWorkflow{}
@@ -28,8 +27,8 @@ type InstallWorkflowConfig struct {
 
 	InstalledVMs storage.Storage[version.Semantic]
 	VMStorage    storage.Storage[storage.Definition[types.VM]]
-	HttpClient   url.Client
-	Fs           filesystem.FileSystem
+	Fs           afero.Fs
+	Installer    Installer
 }
 
 func NewInstallWorkflow(config InstallWorkflowConfig) *InstallWorkflow {
@@ -42,8 +41,8 @@ func NewInstallWorkflow(config InstallWorkflowConfig) *InstallWorkflow {
 		pluginPath:   config.PluginPath,
 		installedVMs: config.InstalledVMs,
 		vmStorage:    config.VMStorage,
-		httpClient:   config.HttpClient,
 		fs:           config.Fs,
+		installer:    config.Installer,
 	}
 }
 
@@ -57,8 +56,8 @@ type InstallWorkflow struct {
 
 	installedVMs storage.Storage[version.Semantic]
 	vmStorage    storage.Storage[storage.Definition[types.VM]]
-	httpClient   url.Client
 	fs           filesystem.FileSystem
+	installer    Installer
 }
 
 func (i InstallWorkflow) Execute() error {
@@ -76,22 +75,17 @@ func (i InstallWorkflow) Execute() error {
 
 	archiveFile := fmt.Sprintf("%s.tar.gz", i.plugin)
 	tmpPath := filepath.Join(i.tmpPath, i.organization, i.repo)
+	archiveFilePath := filepath.Join(tmpPath, archiveFile)
+	workingDir := filepath.Join(tmpPath, i.plugin)
 
-	if vm.InstallScript == "" {
-		fmt.Printf("No install script found for %s.", i.name)
-		return nil
-	}
-
-	// Download the .tar.gz file from the url
-	if err := i.httpClient.Download(filepath.Join(tmpPath, archiveFile), vm.URL); err != nil {
+	if err := i.installer.Download(vm.URL, archiveFilePath); err != nil {
 		// TODO sometimes these aren't cleaned up if we fail before cleanup step
 		return err
 	}
-
 	// Create the directory we'll store the plugin sources in if it doesn't exist.
 	if _, err := i.fs.Stat(i.plugin); errors.Is(err, os.ErrNotExist) {
 		fmt.Printf("Creating sources directory...\n")
-		if err := os.Mkdir(filepath.Join(tmpPath, i.plugin), perms.ReadWriteExecute); err != nil {
+		if err := i.fs.Mkdir(workingDir, perms.ReadWriteExecute); err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -99,20 +93,17 @@ func (i InstallWorkflow) Execute() error {
 	}
 
 	fmt.Printf("Unpacking %s...\n", i.name)
-	cmd := exec.Command("tar", "xf", archiveFile, "-C", i.plugin, "--strip-components", "1")
-	cmd.Dir = tmpPath
-	if err := cmd.Run(); err != nil {
+	if err := i.installer.Decompress(archiveFilePath, workingDir); err != nil {
 		return err
 	}
 
-	workingDir := filepath.Join(tmpPath, i.plugin)
-	fmt.Printf("Running install script at %s...\n", vm.InstallScript)
-	cmd = exec.Command(vm.InstallScript)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Dir = workingDir
-	if err := cmd.Run(); err != nil {
-		return err
+	if vm.InstallScript != "" {
+		fmt.Printf("Running install script at %s...\n", vm.InstallScript)
+		if err := i.installer.Install(workingDir, vm.InstallScript); err != nil {
+			return err
+		}
+	} else {
+		fmt.Printf("No install script found for %s.", i.name)
 	}
 
 	fmt.Printf("Moving binary %s into plugin directory...\n", vm.ID_)

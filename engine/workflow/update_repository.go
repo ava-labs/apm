@@ -12,7 +12,6 @@ import (
 
 	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
-	"github.com/ava-labs/apm/url"
 	"github.com/ava-labs/apm/util"
 )
 
@@ -46,7 +45,7 @@ type UpdateRepositoryConfig struct {
 
 	TmpPath    string
 	PluginPath string
-	HttpClient url.Client
+	Installer  Installer
 }
 
 func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
@@ -65,7 +64,7 @@ func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
 		db:                 config.DB,
 		tmpPath:            config.TmpPath,
 		pluginPath:         config.PluginPath,
-		httpClient:         config.HttpClient,
+		installer:          config.Installer,
 	}
 }
 
@@ -91,7 +90,7 @@ type UpdateRepository struct {
 	tmpPath    string
 	pluginPath string
 
-	httpClient url.Client
+	installer Installer
 }
 
 func (u *UpdateRepository) updateVMs() error {
@@ -141,7 +140,7 @@ func (u *UpdateRepository) updateVMs() error {
 				PluginPath:   u.pluginPath,
 				InstalledVMs: u.installedVMs,
 				VMStorage:    u.repository.VMs(),
-				HttpClient:   u.httpClient,
+				Installer:    u.installer,
 			})
 
 			fmt.Printf(
@@ -234,8 +233,8 @@ func loadFromYAML[T types.Definition](
 	if err != nil {
 		return err
 	}
-	//globalBatch := globalDB.NewBatch()
-	//repoBatch := repoDB.NewBatch()
+	// globalBatch := globalDB.NewBatch()
+	// repoBatch := repoDB.NewBatch()
 
 	for _, file := range files {
 		if file.IsDir() {
@@ -272,7 +271,7 @@ func loadFromYAML[T types.Definition](
 		registry := storage.RepoList{}
 		registry, err = globalDB.Get(aliasBytes)
 		if err == database.ErrNotFound {
-			registry = storage.RepoList{ //TODO check if this can be removed
+			registry = storage.RepoList{ // TODO check if this can be removed
 				Repositories: []string{},
 			}
 		} else if err != nil {
@@ -281,14 +280,14 @@ func loadFromYAML[T types.Definition](
 
 		registry.Repositories = append(registry.Repositories, string(repositoryAlias))
 
-		//updatedRegistryBytes, err := yaml.Marshal(registry)
-		//if err != nil {
+		// updatedRegistryBytes, err := yaml.Marshal(registry)
+		// if err != nil {
 		//	return err
-		//}
-		//updatedRecordBytes, err := yaml.Marshal(definition)
-		//if err != nil {
+		// }
+		// updatedRecordBytes, err := yaml.Marshal(definition)
+		// if err != nil {
 		//	return err
-		//}
+		// }
 
 		if err := globalDB.Put(aliasBytes, registry); err != nil {
 			return err
@@ -300,19 +299,19 @@ func loadFromYAML[T types.Definition](
 		fmt.Printf("Updated plugin definition in registry for %s:%s@%s.\n", repositoryAlias, alias, commit)
 	}
 
-	//if err := globalBatch.Write(); err != nil {
+	// if err := globalBatch.Write(); err != nil {
 	//	return err
-	//}
-	//if err := repoBatch.Write(); err != nil {
+	// }
+	// if err := repoBatch.Write(); err != nil {
 	//	return err
-	//}
+	// }
 	//
 	return nil
 }
 
 func deleteStalePlugins[T types.Definition](db storage.Storage[storage.Definition[T]], latestCommit plumbing.Hash) error {
 	itr := db.Iterator()
-	//TODO batching
+	// TODO batching
 
 	for itr.Next() {
 		definition, err := itr.Value()
