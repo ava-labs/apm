@@ -7,10 +7,12 @@ import (
 
 	"github.com/ava-labs/avalanchego/utils/wrappers"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
+	"github.com/ava-labs/apm/apm"
 	"github.com/ava-labs/apm/config"
 	"github.com/ava-labs/apm/constant"
 )
@@ -59,12 +61,27 @@ func New() (*cobra.Command, error) {
 		return nil, errs.Err
 	}
 
+	credentials, err := getCredentials()
+	if err != nil {
+		return nil, err
+	}
+	apm, err := apm.New(apm.Config{
+		Directory:        viper.GetString(apmPathKey),
+		Auth:             credentials,
+		AdminApiEndpoint: viper.GetString(adminApiEndpointKey),
+		PluginDir:        viper.GetString(pluginPathKey),
+		Fs:               afero.NewOsFs(),
+	})
+
+	if err != nil {
+		return nil, err
+	}
 	rootCmd.AddCommand(
-		install(),
-		uninstall(),
-		update(),
-		listRepositories(),
-		joinSubnet(),
+		install(apm),
+		uninstall(apm),
+		update(apm),
+		listRepositories(apm),
+		joinSubnet(apm),
 	)
 
 	return rootCmd, nil
