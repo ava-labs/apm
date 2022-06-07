@@ -131,7 +131,7 @@ func (u *UpdateRepository) updateVMs() error {
 				updatedVM.Version.Minor,
 				updatedVM.Version.Patch,
 			)
-			installWorkflow := NewInstallWorkflow(InstallWorkflowConfig{
+			installWorkflow := NewInstall(InstallConfig{
 				Name:         fullVMName,
 				Plugin:       vmName,
 				Organization: organization,

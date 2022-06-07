@@ -14,9 +14,9 @@ import (
 	"github.com/ava-labs/apm/types"
 )
 
-var _ Workflow = &InstallWorkflow{}
+var _ Workflow = &Install{}
 
-type InstallWorkflowConfig struct {
+type InstallConfig struct {
 	Name         string
 	Plugin       string
 	Organization string
@@ -30,8 +30,8 @@ type InstallWorkflowConfig struct {
 	Installer    Installer
 }
 
-func NewInstallWorkflow(config InstallWorkflowConfig) *InstallWorkflow {
-	return &InstallWorkflow{
+func NewInstall(config InstallConfig) *Install {
+	return &Install{
 		name:         config.Name,
 		plugin:       config.Plugin,
 		organization: config.Organization,
@@ -45,7 +45,7 @@ func NewInstallWorkflow(config InstallWorkflowConfig) *InstallWorkflow {
 	}
 }
 
-type InstallWorkflow struct {
+type Install struct {
 	name         string
 	plugin       string
 	organization string
@@ -59,7 +59,7 @@ type InstallWorkflow struct {
 	installer    Installer
 }
 
-func (i InstallWorkflow) Execute() error {
+func (i Install) Execute() error {
 	var (
 		definition storage.Definition[types.VM]
 		err        error

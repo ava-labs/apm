@@ -16,7 +16,7 @@ import (
 	"github.com/ava-labs/apm/types"
 )
 
-func TestExecute(t *testing.T) {
+func TestInstallExecute(t *testing.T) {
 	definition := storage.Definition[types.VM]{
 		Definition: types.VM{
 			ID_:           "id",
@@ -188,8 +188,8 @@ func TestExecute(t *testing.T) {
 				fs:           fs,
 			})
 
-			wf := NewInstallWorkflow(
-				InstallWorkflowConfig{
+			wf := NewInstall(
+				InstallConfig{
 					Name:         "name",
 					Plugin:       "plugin",
 					Organization: "organization",

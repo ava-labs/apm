@@ -161,7 +161,7 @@ func (a *APM) install(name string) error {
 	repoAlias, plugin := util.ParseQualifiedName(name)
 	organization, repo := util.ParseAlias(repoAlias)
 
-	workflow := workflow.NewInstallWorkflow(workflow.InstallWorkflowConfig{
+	workflow := workflow.NewInstall(workflow.InstallConfig{
 		Name:         name,
 		Plugin:       plugin,
 		Organization: organization,
