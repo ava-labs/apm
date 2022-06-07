@@ -38,6 +38,7 @@ type Config struct {
 	Auth             http.BasicAuth
 	AdminApiEndpoint string
 	PluginDir        string
+	Fs               afero.Fs
 }
 
 type APM struct {
@@ -67,8 +68,6 @@ func New(config Config) (*APM, error) {
 		return nil, err
 	}
 
-	fs := afero.NewOsFs()
-
 	var a = &APM{
 		repositoriesPath: filepath.Join(config.Directory, repositoryDir),
 		tmpPath:          filepath.Join(config.Directory, tmpDir),
@@ -85,12 +84,12 @@ func New(config Config) (*APM, error) {
 		),
 		installer: workflow.NewVMInstaller(
 			workflow.VMInstallerConfig{
-				Fs:        fs,
+				Fs:        config.Fs,
 				UrlClient: url.NewHttpClient(),
 			},
 		),
 		engine: engine.NewWorkflowEngine(),
-		fs:     fs,
+		fs:     config.Fs,
 	}
 	if err := os.MkdirAll(a.repositoriesPath, perms.ReadWriteExecute); err != nil {
 		return nil, err

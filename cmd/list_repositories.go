@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -23,6 +24,7 @@ func listRepositories() *cobra.Command {
 			Auth:             credentials,
 			AdminApiEndpoint: viper.GetString(adminApiEndpointKey),
 			PluginDir:        viper.GetString(pluginPathKey),
+			Fs:               afero.NewOsFs(),
 		})
 		if err != nil {
 			return err

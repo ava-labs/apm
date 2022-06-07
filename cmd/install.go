@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -19,11 +20,13 @@ func install() *cobra.Command {
 		if err != nil {
 			return err
 		}
+
 		apm, err := apm.New(apm.Config{
 			Directory:        viper.GetString(apmPathKey),
 			Auth:             credentials,
 			AdminApiEndpoint: viper.GetString(adminApiEndpointKey),
 			PluginDir:        viper.GetString(pluginPathKey),
+			Fs:               afero.NewOsFs(),
 		})
 		if err != nil {
 			return err
