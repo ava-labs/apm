@@ -10,7 +10,6 @@ import (
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/spf13/afero"
 
-	"github.com/ava-labs/apm/proxy/filesystem"
 	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
 )
@@ -56,7 +55,7 @@ type InstallWorkflow struct {
 
 	installedVMs storage.Storage[version.Semantic]
 	vmStorage    storage.Storage[storage.Definition[types.VM]]
-	fs           filesystem.FileSystem
+	fs           afero.Fs
 	installer    Installer
 }
 
