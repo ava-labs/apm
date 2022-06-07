@@ -60,7 +60,7 @@ func (u Uninstall) Execute() error {
 		return nil
 	}
 
-	if err := a.installedVMs.Delete([]byte(plugin)); err != nil {
+	if err := u.installedVMs.Delete([]byte(plugin)); err != nil {
 		return err
 	}
 
