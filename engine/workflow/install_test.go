@@ -1,9 +1,11 @@
 package workflow
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
+	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/golang/mock/gomock"
@@ -12,7 +14,6 @@ import (
 
 	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
-	"github.com/ava-labs/apm/url"
 )
 
 func TestExecute(t *testing.T) {
@@ -33,35 +34,80 @@ func TestExecute(t *testing.T) {
 	}
 
 	vm := definition.Definition
+	installPath := filepath.Join("tmpPath", "organization", "repo")
+	workingDir := filepath.Join("tmpPath", "organization", "repo", "plugin")
+	tarPath := filepath.Join(installPath, "plugin.tar.gz")
+	errWrong := fmt.Errorf("something went wrong")
 
-	// errWrong := fmt.Errorf("something went wrong")
-
+	type mocks struct {
+		installedVMs *storage.MockStorage[version.Semantic]
+		vmStorage    *storage.MockStorage[storage.Definition[types.VM]]
+		installer    *MockInstaller
+		fs           afero.Fs
+	}
 	tests := []struct {
-		name  string
-		setup func(
-			*InstallWorkflow,
-			*storage.MockStorage[version.Semantic],
-			*storage.MockStorage[storage.Definition[types.VM]],
-			*url.MockClient,
-			afero.Fs,
-		)
-		err error
+		name    string
+		setup   func(mocks)
+		wantErr assert.ErrorAssertionFunc
 	}{
 		{
-			name: "no prior install and no errors",
-			setup: func(
-				wf *InstallWorkflow,
-				installedVMs *storage.MockStorage[version.Semantic],
-				vmStorage *storage.MockStorage[storage.Definition[types.VM]],
-				urlClient *url.MockClient,
-				fs afero.Fs,
-			) {
-				installPath := filepath.Join(wf.tmpPath, wf.organization, wf.repo)
-
-				vmStorage.EXPECT().Get([]byte("plugin")).Return(definition, nil)
-				urlClient.EXPECT().Download(filepath.Join(installPath, "plugin.tar.gz"), vm.URL).Return(nil)
+			name: "read vm registry fails",
+			setup: func(mocks mocks) {
+				mocks.vmStorage.EXPECT().Get([]byte("plugin")).Return(storage.Definition[types.VM]{}, errWrong)
 			},
-			err: nil,
+			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Equal(t, err, errWrong)
+			},
+		},
+		{
+			name: "download fails",
+			setup: func(mocks mocks) {
+				mocks.vmStorage.EXPECT().Get([]byte("plugin")).Return(definition, nil)
+				mocks.installer.EXPECT().Download(vm.URL, tarPath).Return(errWrong)
+			},
+			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Equal(t, err, errWrong)
+			},
+		},
+		{
+			name: "install fails",
+			setup: func(mocks mocks) {
+				mocks.vmStorage.EXPECT().Get([]byte("plugin")).Return(definition, nil)
+				mocks.installer.EXPECT().Download(vm.URL, tarPath).Return(errWrong)
+			},
+			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Equal(t, err, errWrong)
+			},
+		},
+		{
+			name: "decompress fails",
+			setup: func(mocks mocks) {
+				mocks.vmStorage.EXPECT().Get([]byte("plugin")).Return(definition, nil)
+				mocks.installer.EXPECT().Download(vm.URL, tarPath).Do(func(string, string) error {
+					return afero.WriteFile(mocks.fs, tarPath, nil, perms.ReadWrite)
+				})
+				mocks.installer.EXPECT().Decompress(tarPath, workingDir).Return(errWrong)
+			},
+			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Equal(t, err, errWrong)
+			},
+		},
+		{
+			name: "happy case clean install",
+			setup: func(mocks mocks) {
+				mocks.vmStorage.EXPECT().Get([]byte("plugin")).Return(definition, nil)
+				mocks.installer.EXPECT().Download(vm.URL, tarPath).Do(func(string, string) error {
+					return afero.WriteFile(mocks.fs, tarPath, nil, perms.ReadWrite)
+				})
+				mocks.installer.EXPECT().Decompress(tarPath, workingDir).Do(func(string, string) error {
+					return afero.WriteFile(mocks.fs, filepath.Join(workingDir, vm.BinaryPath), nil, perms.ReadWrite)
+				})
+				mocks.installer.EXPECT().Install(workingDir, vm.InstallScript).Return(nil)
+				mocks.installedVMs.EXPECT().Put([]byte("name"), vm.Version).Return(nil)
+			},
+			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Nil(t, err)
+			},
 		},
 	}
 
@@ -76,8 +122,15 @@ func TestExecute(t *testing.T) {
 
 			installedVMs = storage.NewMockStorage[version.Semantic](ctrl)
 			vmStorage = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
-			urlClient := url.NewMockClient(ctrl)
+			installer := NewMockInstaller(ctrl)
 			fs := afero.NewMemMapFs()
+
+			test.setup(mocks{
+				installedVMs: installedVMs,
+				vmStorage:    vmStorage,
+				installer:    installer,
+				fs:           fs,
+			})
 
 			wf := NewInstallWorkflow(
 				InstallWorkflowConfig{
@@ -89,16 +142,12 @@ func TestExecute(t *testing.T) {
 					PluginPath:   "pluginPath",
 					InstalledVMs: installedVMs,
 					VMStorage:    vmStorage,
-					UrlClient:    urlClient,
 					Fs:           fs,
-					Installer:    NewMockInstaller(ctrl),
+					Installer:    installer,
 				},
 			)
 
-			test.setup(wf, installedVMs, vmStorage, urlClient, fs)
-
-			err := wf.Execute()
-			assert.Equal(t, test.err, err)
+			test.wantErr(t, wf.Execute())
 		})
 	}
 }

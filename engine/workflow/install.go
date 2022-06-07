@@ -61,7 +61,7 @@ type InstallWorkflow struct {
 
 func (i InstallWorkflow) Execute() error {
 	var (
-		definition storage.Definition[types.VM] // TODO fix this weird hack
+		definition storage.Definition[types.VM]
 		err        error
 	)
 
@@ -106,7 +106,7 @@ func (i InstallWorkflow) Execute() error {
 	}
 
 	fmt.Printf("Moving binary %s into plugin directory...\n", vm.ID_)
-	if err := os.Rename(filepath.Join(workingDir, vm.BinaryPath), filepath.Join(i.pluginPath, vm.ID_)); err != nil {
+	if err := i.fs.Rename(filepath.Join(workingDir, vm.BinaryPath), filepath.Join(i.pluginPath, vm.ID_)); err != nil {
 		return err
 	}
 
