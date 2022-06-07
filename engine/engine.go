@@ -1,6 +1,6 @@
 package engine
 
-import "github.com/ava-labs/apm/engine/workflow"
+import "github.com/ava-labs/apm/workflow"
 
 var _ workflow.Executor = &WorkflowEngine{}
 
