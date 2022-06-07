@@ -61,6 +61,7 @@ func New() (*cobra.Command, error) {
 
 	rootCmd.AddCommand(
 		install(),
+		uninstall(),
 		update(),
 		listRepositories(),
 		joinSubnet(),
