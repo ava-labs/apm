@@ -31,7 +31,7 @@ const (
 	adminApiEndpointKey = "admin-api-endpoint"
 )
 
-func New() (*cobra.Command, error) {
+func New(fs afero.Fs) (*cobra.Command, error) {
 	rootCmd := &cobra.Command{
 		Use:   "apm",
 		Short: "apm is a plugin manager to help manage virtual machines and subnets",
@@ -70,7 +70,7 @@ func New() (*cobra.Command, error) {
 		Auth:             credentials,
 		AdminApiEndpoint: viper.GetString(adminApiEndpointKey),
 		PluginDir:        viper.GetString(pluginPathKey),
-		Fs:               afero.NewOsFs(),
+		Fs:               fs,
 	})
 
 	if err != nil {
