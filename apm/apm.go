@@ -304,21 +304,15 @@ func (a *APM) Update() error {
 }
 
 func (a *APM) AddRepository(alias string, url string) error {
-	aliasBytes := []byte(alias)
+	wf := workflow.NewAddRepository(
+		workflow.AddRepositoryConfig{
+			SourceList: a.sourcesList,
+			Alias:      alias,
+			Url:        url,
+		},
+	)
 
-	if ok, err := a.sourcesList.Has(aliasBytes); err != nil {
-		return err
-	} else if ok {
-		fmt.Printf("%s is already registered as a repository.\n", alias)
-		return nil
-	}
-
-	unsynced := storage.SourceInfo{
-		Alias:  alias,
-		URL:    url,
-		Commit: plumbing.ZeroHash, // hasn't been synced yet
-	}
-	return a.sourcesList.Put(aliasBytes, unsynced)
+	return a.engine.Execute(wf)
 }
 
 func (a *APM) RemoveRepository(alias string) error {
