@@ -11,7 +11,6 @@ import (
 	"github.com/ava-labs/avalanche-plugins-core/core"
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/leveldb"
-	"github.com/ava-labs/avalanchego/database/prefixdb"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/ava-labs/avalanchego/version"
@@ -32,8 +31,6 @@ var (
 	dbDir         = "db"
 	repositoryDir = "repositories"
 	tmpDir        = "tmp"
-
-	vmPrefix = []byte("vm")
 )
 
 type Config struct {
@@ -185,39 +182,15 @@ func (a *APM) Uninstall(alias string) error {
 }
 
 func (a *APM) uninstall(name string) error {
-	nameBytes := []byte(name)
+	wf := workflow.NewUninstall(
+		workflow.UninstallConfig{
+			Name:         name,
+			DB:           a.db,
+			InstalledVMs: a.installedVMs,
+		},
+	)
 
-	ok, err := a.installedVMs.Has(nameBytes)
-	if err != nil {
-		return err
-	}
-
-	if !ok {
-		fmt.Printf("VM %s is already not installed. Skipping.\n", name)
-		return nil
-	}
-
-	alias, plugin := util.ParseQualifiedName(name)
-
-	repoDB := prefixdb.New([]byte(alias), a.db)
-	repoVMDB := prefixdb.New(vmPrefix, repoDB)
-
-	ok, err = repoVMDB.Has([]byte(plugin))
-	if err != nil {
-		return err
-	}
-	if !ok {
-		fmt.Printf("Virtual machine already %s doesn't exist in the vm registry for %s.", name, alias)
-		return nil
-	}
-
-	if err := a.installedVMs.Delete([]byte(plugin)); err != nil {
-		return err
-	}
-
-	fmt.Printf("Successfully uninstalled %s.", name)
-
-	return nil
+	return wf.Execute()
 }
 
 func (a *APM) JoinSubnet(alias string) error {
