@@ -31,8 +31,6 @@ var (
 	dbDir         = "db"
 	repositoryDir = "repositories"
 	tmpDir        = "tmp"
-
-	vmPrefix = []byte("vm")
 )
 
 type Config struct {
