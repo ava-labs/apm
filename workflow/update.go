@@ -19,7 +19,7 @@ type UpdateConfig struct {
 	Executor         Executor
 	Registry         storage.Storage[storage.RepoList]
 	InstalledVMs     storage.Storage[version.Semantic]
-	SourcesList       storage.Storage[storage.SourceInfo]
+	SourcesList      storage.Storage[storage.SourceInfo]
 	DB               database.Database
 	TmpPath          string
 	PluginPath       string
@@ -37,7 +37,7 @@ func NewUpdate(config UpdateConfig) *Update {
 		tmpPath:          config.TmpPath,
 		pluginPath:       config.PluginPath,
 		installer:        config.Installer,
-		sourcesList:       config.SourcesList,
+		sourcesList:      config.SourcesList,
 		repositoriesPath: config.RepositoriesPath,
 		auth:             config.Auth,
 	}
@@ -48,7 +48,7 @@ type Update struct {
 	db               database.Database
 	registry         storage.Storage[storage.RepoList]
 	installedVMs     storage.Storage[version.Semantic]
-	sourcesList       storage.Storage[storage.SourceInfo]
+	sourcesList      storage.Storage[storage.SourceInfo]
 	installer        Installer
 	auth             http.BasicAuth
 	tmpPath          string
@@ -58,6 +58,7 @@ type Update struct {
 
 func (u Update) Execute() error {
 	itr := u.sourcesList.Iterator()
+	defer itr.Release()
 
 	for itr.Next() {
 		aliasBytes := itr.Key()
@@ -97,7 +98,7 @@ func (u Update) Execute() error {
 			}),
 			Registry:     u.registry,
 			SourceInfo:   sourceInfo,
-			SourcesList:   u.sourcesList,
+			SourcesList:  u.sourcesList,
 			InstalledVMs: u.installedVMs,
 			DB:           u.db,
 			TmpPath:      u.tmpPath,
