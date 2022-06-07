@@ -102,7 +102,7 @@ func (i InstallWorkflow) Execute() error {
 			return err
 		}
 	} else {
-		fmt.Printf("No install script found for %s.", i.name)
+		fmt.Printf("No install script found for %s.\n", i.name)
 	}
 
 	fmt.Printf("Moving binary %s into plugin directory...\n", vm.ID_)
