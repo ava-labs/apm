@@ -19,7 +19,7 @@ func TestRepository(t *testing.T) {
 	// expectedVMDB := NewVM(foobarDB)
 	// expectedSubnetDB := NewSubnet(foobarDB)
 
-	repository := NewRepository(RepositoryConfig{
+	repository := NewPackageRepository(RepositoryConfig{
 		Alias: []byte("foobar"),
 		DB:    db,
 	})

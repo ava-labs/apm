@@ -38,7 +38,7 @@ type UpdateRepositoryConfig struct {
 	SourceInfo   storage.SourceInfo
 	Repository   storage.Repository
 	Registry     storage.Storage[storage.RepoList]
-	SourcesList   storage.Storage[storage.SourceInfo]
+	SourcesList  storage.Storage[storage.SourceInfo]
 	InstalledVMs storage.Storage[version.Semantic]
 
 	DB database.Database
@@ -60,7 +60,7 @@ func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
 		registry:           config.Registry,
 		repositoryMetadata: config.SourceInfo,
 		installedVMs:       config.InstalledVMs,
-		sourcesList:         config.SourcesList,
+		sourcesList:        config.SourcesList,
 		db:                 config.DB,
 		tmpPath:            config.TmpPath,
 		pluginPath:         config.PluginPath,
@@ -84,7 +84,7 @@ type UpdateRepository struct {
 	repositoryMetadata storage.SourceInfo
 
 	installedVMs storage.Storage[version.Semantic]
-	sourcesList   storage.Storage[storage.SourceInfo]
+	sourcesList  storage.Storage[storage.SourceInfo]
 	db           database.Database
 
 	tmpPath    string
@@ -112,7 +112,7 @@ func (u *UpdateRepository) updateVMs() error {
 		// weird hack for generics to make the go compiler happy.
 		var definition storage.Definition[types.VM]
 
-		vmStorage := u.repository.VMs()
+		vmStorage := u.repository.VMs
 		definition, err = vmStorage.Get([]byte(vmName))
 		if err != nil {
 			return err
@@ -139,7 +139,7 @@ func (u *UpdateRepository) updateVMs() error {
 				TmpPath:      u.tmpPath,
 				PluginPath:   u.pluginPath,
 				InstalledVMs: u.installedVMs,
-				VMStorage:    u.repository.VMs(),
+				VMStorage:    u.repository.VMs,
 				Installer:    u.installer,
 			})
 
@@ -195,20 +195,20 @@ func (u *UpdateRepository) Execute() error {
 func (u *UpdateRepository) updateDefinitions() error {
 	vmsPath := filepath.Join(u.repositoryPath, vmDir)
 
-	if err := loadFromYAML[types.VM](vmKey, vmsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.VMs()); err != nil {
+	if err := loadFromYAML[types.VM](vmKey, vmsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.VMs); err != nil {
 		return err
 	}
 
 	subnetsPath := filepath.Join(u.repositoryPath, subnetDir)
-	if err := loadFromYAML[types.Subnet](subnetKey, subnetsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.Subnets()); err != nil {
+	if err := loadFromYAML[types.Subnet](subnetKey, subnetsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.Subnets); err != nil {
 		return err
 	}
 
 	// Now we need to delete anything that wasn't updated in the latest commit
-	if err := deleteStalePlugins[types.VM](u.repository.VMs(), u.latestCommit); err != nil {
+	if err := deleteStalePlugins[types.VM](u.repository.VMs, u.latestCommit); err != nil {
 		return err
 	}
-	if err := deleteStalePlugins[types.Subnet](u.repository.Subnets(), u.latestCommit); err != nil {
+	if err := deleteStalePlugins[types.Subnet](u.repository.Subnets, u.latestCommit); err != nil {
 		return err
 	}
 

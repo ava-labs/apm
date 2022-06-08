@@ -20,6 +20,7 @@ import (
 
 	"github.com/ava-labs/apm/admin"
 	"github.com/ava-labs/apm/engine"
+	"github.com/ava-labs/apm/git"
 	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
 	"github.com/ava-labs/apm/url"
@@ -47,6 +48,7 @@ type APM struct {
 	sourcesList  storage.Storage[storage.SourceInfo]
 	installedVMs storage.Storage[version.Semantic]
 	registry     storage.Storage[storage.RepoList]
+	repoFactory  storage.RepositoryFactory
 
 	engine workflow.Executor
 
@@ -88,8 +90,9 @@ func New(config Config) (*APM, error) {
 				UrlClient: url.NewHttpClient(),
 			},
 		),
-		engine: engine.NewWorkflowEngine(),
-		fs:     config.Fs,
+		engine:      engine.NewWorkflowEngine(),
+		fs:          config.Fs,
+		repoFactory: storage.NewRepositoryFactory(db),
 	}
 	if err := os.MkdirAll(a.repositoriesPath, perms.ReadWriteExecute); err != nil {
 		return nil, err
@@ -157,10 +160,7 @@ func (a *APM) install(name string) error {
 	repoAlias, plugin := util.ParseQualifiedName(name)
 	organization, repo := util.ParseAlias(repoAlias)
 
-	repository := storage.NewRepository(storage.RepositoryConfig{
-		Alias: []byte(repoAlias),
-		DB:    a.db,
-	})
+	repository := a.repoFactory.GetRepository([]byte(repoAlias))
 
 	workflow := workflow.NewInstall(workflow.InstallConfig{
 		Name:         name,
@@ -170,7 +170,7 @@ func (a *APM) install(name string) error {
 		TmpPath:      a.tmpPath,
 		PluginPath:   a.pluginPath,
 		InstalledVMs: a.installedVMs,
-		VMStorage:    repository.VMs(),
+		VMStorage:    repository.VMs,
 		Fs:           a.fs,
 		Installer:    a.installer,
 	})
@@ -185,17 +185,14 @@ func (a *APM) Uninstall(alias string) error {
 func (a *APM) uninstall(name string) error {
 	alias, plugin := util.ParseQualifiedName(name)
 
-	repository := storage.NewRepository(storage.RepositoryConfig{
-		Alias: []byte(alias),
-		DB:    a.db,
-	})
+	repository := a.repoFactory.GetRepository([]byte(alias))
 
 	wf := workflow.NewUninstall(
 		workflow.UninstallConfig{
 			Name:         name,
 			Plugin:       plugin,
 			RepoAlias:    alias,
-			VMStorage:    repository.VMs(),
+			VMStorage:    repository.VMs,
 			InstalledVMs: a.installedVMs,
 		},
 	)
@@ -209,11 +206,7 @@ func (a *APM) JoinSubnet(alias string) error {
 
 func (a *APM) joinSubnet(fullName string) error {
 	alias, plugin := util.ParseQualifiedName(fullName)
-	aliasBytes := []byte(alias)
-	repoRegistry := storage.NewRepository(storage.RepositoryConfig{
-		Alias: aliasBytes,
-		DB:    a.db,
-	})
+	repoRegistry := a.repoFactory.GetRepository([]byte(alias))
 
 	var (
 		// weird hack for generics
@@ -221,7 +214,7 @@ func (a *APM) joinSubnet(fullName string) error {
 		err        error
 	)
 
-	definition, err = repoRegistry.Subnets().Get([]byte(plugin))
+	definition, err = repoRegistry.Subnets.Get([]byte(plugin))
 	if err != nil {
 		return err
 	}
@@ -288,9 +281,10 @@ func (a *APM) Update() error {
 		TmpPath:          a.tmpPath,
 		PluginPath:       a.pluginPath,
 		Installer:        a.installer,
-		SourcesList:       a.sourcesList,
+		SourcesList:      a.sourcesList,
 		RepositoriesPath: a.repositoriesPath,
 		Auth:             a.auth,
+		GitFactory:       git.RepositoryFactory{},
 	})
 
 	if err := a.engine.Execute(workflow); err != nil {
@@ -304,8 +298,8 @@ func (a *APM) AddRepository(alias string, url string) error {
 	wf := workflow.NewAddRepository(
 		workflow.AddRepositoryConfig{
 			SourcesList: a.sourcesList,
-			Alias:      alias,
-			Url:        url,
+			Alias:       alias,
+			Url:         url,
 		},
 	)
 
@@ -333,27 +327,23 @@ func (a *APM) removeRepository(name string) error {
 
 	// TODO don't let people remove core
 	aliasBytes := []byte(name)
-
-	repoRegistry := storage.NewRepository(storage.RepositoryConfig{
-		Alias: aliasBytes,
-		DB:    a.db,
-	})
+	repoRegistry := a.repoFactory.GetRepository(aliasBytes)
 
 	// delete all the plugin definitions in the repository
-	vmItr := repoRegistry.VMs().Iterator()
+	vmItr := repoRegistry.VMs.Iterator()
 	defer vmItr.Release()
 
 	for vmItr.Next() {
-		if err := repoRegistry.VMs().Delete(vmItr.Key()); err != nil {
+		if err := repoRegistry.VMs.Delete(vmItr.Key()); err != nil {
 			return err
 		}
 	}
 
-	subnetItr := repoRegistry.Subnets().Iterator()
+	subnetItr := repoRegistry.Subnets.Iterator()
 	defer subnetItr.Release()
 
 	for subnetItr.Next() {
-		if err := repoRegistry.Subnets().Delete(subnetItr.Key()); err != nil {
+		if err := repoRegistry.Subnets.Delete(subnetItr.Key()); err != nil {
 			return err
 		}
 	}

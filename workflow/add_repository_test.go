@@ -89,14 +89,14 @@ func TestAddRepositoryExecute(t *testing.T) {
 			sourcesList = storage.NewMockStorage[storage.SourceInfo](ctrl)
 
 			test.setup(mocks{
-				sourcesList: sourceList,
+				sourcesList: sourcesList,
 			})
 
 			wf := NewAddRepository(
 				AddRepositoryConfig{
 					SourcesList: sourcesList,
-					Alias:      "alias",
-					Url:        "url",
+					Alias:       "alias",
+					Url:         "url",
 				},
 			)
 

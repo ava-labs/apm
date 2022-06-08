@@ -9,30 +9,27 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 )
 
-var _ Repository = &Remote{}
-
-type Repository interface {
-	Head() (plumbing.Hash, error)
+type Factory interface {
+	GetRepository(url string, path string, reference plumbing.ReferenceName, auth *http.BasicAuth) (plumbing.Hash, error)
 }
 
-type Remote struct {
-	repo *git.Repository
+type RepositoryFactory struct {
 }
 
-func NewRemote(url string, path string, reference plumbing.ReferenceName, auth *http.BasicAuth) (*Remote, error) {
+func (f RepositoryFactory) GetRepository(url string, path string, reference plumbing.ReferenceName, auth *http.BasicAuth) (plumbing.Hash, error) {
 	var repo *git.Repository
 	if _, err := os.Stat(path); err == nil {
 		// already exists, we need to check out the latest changes
 		repo, err = git.PlainOpen(path)
 		if err != nil {
-			return nil, err
+			return plumbing.ZeroHash, err
 		}
 		worktree, err := repo.Worktree()
 		if err != nil {
-			return nil, err
+			return plumbing.ZeroHash, err
 		}
 		if err := worktree.Pull(
-			//ODO use fetch + checkout instead of pull
+			// ODO use fetch + checkout instead of pull
 			&git.PullOptions{
 				RemoteName:    "origin",
 				ReferenceName: reference,
@@ -41,7 +38,7 @@ func NewRemote(url string, path string, reference plumbing.ReferenceName, auth *
 				Progress:      io.Discard,
 			},
 		); err != nil && err != git.NoErrAlreadyUpToDate {
-			return nil, err
+			return plumbing.ZeroHash, err
 		}
 	} else if os.IsNotExist(err) {
 		// otherwise, we need to clone the repository
@@ -53,17 +50,13 @@ func NewRemote(url string, path string, reference plumbing.ReferenceName, auth *
 			Progress:      io.Discard,
 		})
 		if err != nil {
-			return nil, err
+			return plumbing.ZeroHash, err
 		}
 	} else {
-		return nil, err
+		return plumbing.ZeroHash, err
 	}
 
-	return &Remote{repo: repo}, nil
-}
-
-func (r Remote) Head() (plumbing.Hash, error) {
-	head, err := r.repo.Head()
+	head, err := repo.Head()
 	if err != nil {
 		return plumbing.ZeroHash, err
 	}

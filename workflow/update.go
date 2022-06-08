@@ -6,6 +6,7 @@ import (
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/version"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 
 	"github.com/ava-labs/apm/git"
@@ -13,7 +14,11 @@ import (
 	"github.com/ava-labs/apm/util"
 )
 
-var _ Workflow = &Update{}
+var (
+	_ Workflow = &Update{}
+
+	mainBranch = plumbing.NewBranchReferenceName("main")
+)
 
 type UpdateConfig struct {
 	Executor         Executor
@@ -26,6 +31,8 @@ type UpdateConfig struct {
 	Installer        Installer
 	RepositoriesPath string
 	Auth             http.BasicAuth
+	GitFactory       git.Factory
+	RepoFactory      storage.RepositoryFactory
 }
 
 func NewUpdate(config UpdateConfig) *Update {
@@ -40,6 +47,8 @@ func NewUpdate(config UpdateConfig) *Update {
 		sourcesList:      config.SourcesList,
 		repositoriesPath: config.RepositoriesPath,
 		auth:             config.Auth,
+		gitFactory:       config.GitFactory,
+		repoFactory:      config.RepoFactory,
 	}
 }
 
@@ -54,6 +63,8 @@ type Update struct {
 	tmpPath          string
 	pluginPath       string
 	repositoriesPath string
+	gitFactory       git.Factory
+	repoFactory      storage.RepositoryFactory
 }
 
 func (u Update) Execute() error {
@@ -69,13 +80,12 @@ func (u Update) Execute() error {
 			return err
 		}
 		repositoryPath := filepath.Join(u.repositoriesPath, organization, repo)
-		gitRepo, err := git.NewRemote(sourceInfo.URL, repositoryPath, "refs/heads/main", &u.auth)
+		latestCommit, err := u.gitFactory.GetRepository(sourceInfo.URL, repositoryPath, mainBranch, &u.auth)
 		if err != nil {
 			return err
 		}
 
 		previousCommit := sourceInfo.Commit
-		latestCommit, err := gitRepo.Head()
 		if err != nil {
 			return err
 		}
@@ -92,18 +102,15 @@ func (u Update) Execute() error {
 			AliasBytes:     aliasBytes,
 			PreviousCommit: previousCommit,
 			LatestCommit:   latestCommit,
-			Repository: storage.NewRepository(storage.RepositoryConfig{
-				Alias: aliasBytes,
-				DB:    u.db,
-			}),
-			Registry:     u.registry,
-			SourceInfo:   sourceInfo,
-			SourcesList:  u.sourcesList,
-			InstalledVMs: u.installedVMs,
-			DB:           u.db,
-			TmpPath:      u.tmpPath,
-			PluginPath:   u.pluginPath,
-			Installer:    u.installer,
+			Repository:     u.repoFactory.GetRepository(aliasBytes),
+			Registry:       u.registry,
+			SourceInfo:     sourceInfo,
+			SourcesList:    u.sourcesList,
+			InstalledVMs:   u.installedVMs,
+			DB:             u.db,
+			TmpPath:        u.tmpPath,
+			PluginPath:     u.pluginPath,
+			Installer:      u.installer,
 		})
 
 		if err := u.executor.Execute(workflow); err != nil {

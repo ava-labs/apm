@@ -5,6 +5,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func NewIterator[V any](itr database.Iterator) *Iterator[V] {
+	return &Iterator[V]{
+		itr: itr,
+	}
+}
+
 type Iterator[V any] struct {
 	itr database.Iterator
 }
