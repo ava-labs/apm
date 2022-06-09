@@ -18,9 +18,9 @@ import (
 )
 
 var (
+	goPath  = os.ExpandEnv("$GOPATH")
 	homeDir = os.ExpandEnv("$HOME")
 	apmDir  = filepath.Join(homeDir, fmt.Sprintf(".%s", constant.AppName))
-	goPath  = os.ExpandEnv("$GOPATH")
 )
 
 const (
