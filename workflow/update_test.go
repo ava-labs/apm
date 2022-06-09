@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -17,8 +18,6 @@ import (
 )
 
 func TestUpdateExecute(t *testing.T) {
-	// errWrong := fmt.Errorf("something went wrong")
-	//
 	const (
 		organization     = "organization"
 		repo             = "repository"
@@ -30,6 +29,8 @@ func TestUpdateExecute(t *testing.T) {
 	)
 
 	var (
+		errWrong = fmt.Errorf("sopmething went wrong")
+
 		previousCommit  = plumbing.Hash{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
 		latestCommit    = plumbing.Hash{2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2}
 		repoInstallPath = filepath.Join(repositoriesPath, organization, repo)
@@ -52,6 +53,8 @@ func TestUpdateExecute(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	garbageBytes := []byte("garbage")
+
 	type mocks struct {
 		ctrl         *gomock.Controller
 		executor     *MockExecutor
@@ -69,6 +72,93 @@ func TestUpdateExecute(t *testing.T) {
 		setup   func(mocks)
 		wantErr assert.ErrorAssertionFunc
 	}{
+		{
+			name: "bad source info",
+			setup: func(mocks mocks) {
+
+				// iterator with only one key/value pair
+				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
+					itr := mockdb.NewMockIterator(mocks.ctrl)
+					defer itr.EXPECT().Release()
+
+					itr.EXPECT().Next().Return(true)
+					itr.EXPECT().Key().Return([]byte(alias))
+
+					itr.EXPECT().Value().Return(garbageBytes)
+
+					return *storage.NewIterator[storage.SourceInfo](itr)
+				})
+			},
+			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Error(t, err)
+			},
+		},
+		{
+			name: "cant get latest git head",
+			setup: func(mocks mocks) {
+
+				// iterator with only one key/value pair
+				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
+					itr := mockdb.NewMockIterator(mocks.ctrl)
+					defer itr.EXPECT().Release()
+
+					itr.EXPECT().Next().Return(true)
+					itr.EXPECT().Key().Return([]byte(alias))
+
+					itr.EXPECT().Value().Return(sourceInfoBytes)
+
+					return *storage.NewIterator[storage.SourceInfo](itr)
+				})
+
+				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, mainBranch, &mocks.auth).Return(plumbing.ZeroHash, errWrong)
+			},
+			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Equal(t, errWrong, err)
+			},
+		},
+		{
+			name: "workflow fails",
+			setup: func(mocks mocks) {
+
+				// iterator with only one key/value pair
+				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
+					itr := mockdb.NewMockIterator(mocks.ctrl)
+					defer itr.EXPECT().Release()
+
+					itr.EXPECT().Next().Return(true)
+					itr.EXPECT().Key().Return([]byte(alias))
+
+					itr.EXPECT().Value().Return(sourceInfoBytes)
+
+					return *storage.NewIterator[storage.SourceInfo](itr)
+				})
+
+				wf := NewUpdateRepository(UpdateRepositoryConfig{
+					Executor:       mocks.executor,
+					RepoName:       repo,
+					RepositoryPath: repoInstallPath,
+					AliasBytes:     []byte(alias),
+					PreviousCommit: previousCommit,
+					LatestCommit:   latestCommit,
+					Repository:     repository,
+					Registry:       mocks.registry,
+					SourceInfo:     sourceInfo,
+					SourcesList:    mocks.sourcesList,
+					InstalledVMs:   mocks.installedVMs,
+					DB:             mocks.db,
+					TmpPath:        tmpPath,
+					PluginPath:     pluginPath,
+					Installer:      mocks.installer,
+				})
+
+				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, mainBranch, &mocks.auth).Return(latestCommit, nil)
+				mocks.repoFactory.EXPECT().GetRepository([]byte(alias)).Return(repository)
+				mocks.executor.EXPECT().Execute(wf).Return(errWrong)
+			},
+			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.Equal(t, errWrong, err)
+			},
+		},
 		{
 			name: "success single repository",
 			setup: func(mocks mocks) {
@@ -107,7 +197,7 @@ func TestUpdateExecute(t *testing.T) {
 
 				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, mainBranch, &mocks.auth).Return(latestCommit, nil)
 				mocks.repoFactory.EXPECT().GetRepository([]byte(alias)).Return(repository)
-				mocks.executor.EXPECT().Execute(wf)
+				mocks.executor.EXPECT().Execute(wf).Return(nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return false
