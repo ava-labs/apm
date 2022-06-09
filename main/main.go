@@ -12,7 +12,7 @@ import (
 func main() {
 	apm, err := cmd.New(afero.NewOsFs())
 	if err != nil {
-		fmt.Printf("Failed to initialize the apm command %s.\n", err)
+		fmt.Printf("Failed to initialize the apm command: %s.\n", err)
 		os.Exit(1)
 	}
 
