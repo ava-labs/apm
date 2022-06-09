@@ -18,6 +18,7 @@ import (
 
 func TestUpdateExecute(t *testing.T) {
 	// errWrong := fmt.Errorf("something went wrong")
+	//
 	const (
 		organization     = "organization"
 		repo             = "repository"
@@ -86,9 +87,6 @@ func TestUpdateExecute(t *testing.T) {
 					return *storage.NewIterator[storage.SourceInfo](itr)
 				})
 
-				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, mainBranch, &mocks.auth).Return(latestCommit, nil)
-				mocks.repoFactory.EXPECT().GetRepository([]byte(alias)).Return(repository)
-
 				wf := NewUpdateRepository(UpdateRepositoryConfig{
 					Executor:       mocks.executor,
 					RepoName:       repo,
@@ -107,6 +105,8 @@ func TestUpdateExecute(t *testing.T) {
 					Installer:      mocks.installer,
 				})
 
+				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, mainBranch, &mocks.auth).Return(latestCommit, nil)
+				mocks.repoFactory.EXPECT().GetRepository([]byte(alias)).Return(repository)
 				mocks.executor.EXPECT().Execute(wf)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
