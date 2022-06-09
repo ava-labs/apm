@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+// TODO use the avalanchego client instead of this
+
 var _ Client = &HttpClient{}
 
 type Client interface {
