@@ -151,79 +151,6 @@ func (u *UpdateRepository) updateDefinitions() error {
 	return nil
 }
 
-func (u *UpdateRepository) updateVMs() error {
-	updated := false
-
-	itr := u.installedVMs.Iterator()
-	defer itr.Release()
-
-	for itr.Next() {
-		fullVMName := string(itr.Key())
-		installedVersion, err := itr.Value()
-		if err != nil {
-			return err
-		}
-
-		repoAlias, vmName := util.ParseQualifiedName(fullVMName)
-		organization, repo := util.ParseAlias(repoAlias)
-
-		// weird hack for generics to make the go compiler happy.
-		var definition storage.Definition[types.VM]
-
-		vmStorage := u.repository.VMs
-		definition, err = vmStorage.Get([]byte(vmName))
-		if err != nil {
-			return err
-		}
-
-		updatedVM := definition.Definition
-
-		if installedVersion.Compare(updatedVM.Version) < 0 {
-			fmt.Printf(
-				"Detected an update for %s from v%v.%v.%v to v%v.%v.%v.\n",
-				fullVMName,
-				installedVersion.Major,
-				installedVersion.Minor,
-				installedVersion.Patch,
-				updatedVM.Version.Major,
-				updatedVM.Version.Minor,
-				updatedVM.Version.Patch,
-			)
-			installWorkflow := NewInstall(InstallConfig{
-				Name:         fullVMName,
-				Plugin:       vmName,
-				Organization: organization,
-				Repo:         repo,
-				TmpPath:      u.tmpPath,
-				PluginPath:   u.pluginPath,
-				InstalledVMs: u.installedVMs,
-				VMStorage:    u.repository.VMs,
-				Installer:    u.installer,
-			})
-
-			fmt.Printf(
-				"Rebuilding binaries for %s v%v.%v.%v.\n",
-				fullVMName,
-				updatedVM.Version.Major,
-				updatedVM.Version.Minor,
-				updatedVM.Version.Patch,
-			)
-			if err := u.executor.Execute(installWorkflow); err != nil {
-				return err
-			}
-
-			updated = true
-		}
-	}
-
-	if !updated {
-		fmt.Printf("No changes detected.")
-		return nil
-	}
-
-	return nil
-}
-
 func loadFromYAML[T types.Definition](
 	fs afero.Fs,
 	key string,
@@ -313,6 +240,79 @@ func deleteStaleDefinitions[T types.Definition](db storage.Storage[storage.Defin
 				return err
 			}
 		}
+	}
+
+	return nil
+}
+
+func (u *UpdateRepository) updateVMs() error {
+	updated := false
+
+	itr := u.installedVMs.Iterator()
+	defer itr.Release()
+
+	for itr.Next() {
+		fullVMName := string(itr.Key())
+		installedVersion, err := itr.Value()
+		if err != nil {
+			return err
+		}
+
+		repoAlias, vmName := util.ParseQualifiedName(fullVMName)
+		organization, repo := util.ParseAlias(repoAlias)
+
+		// weird hack for generics to make the go compiler happy.
+		var definition storage.Definition[types.VM]
+
+		vmStorage := u.repository.VMs
+		definition, err = vmStorage.Get([]byte(vmName))
+		if err != nil {
+			return err
+		}
+
+		updatedVM := definition.Definition
+
+		if installedVersion.Compare(updatedVM.Version) < 0 {
+			fmt.Printf(
+				"Detected an update for %s from v%v.%v.%v to v%v.%v.%v.\n",
+				fullVMName,
+				installedVersion.Major,
+				installedVersion.Minor,
+				installedVersion.Patch,
+				updatedVM.Version.Major,
+				updatedVM.Version.Minor,
+				updatedVM.Version.Patch,
+			)
+			installWorkflow := NewInstall(InstallConfig{
+				Name:         fullVMName,
+				Plugin:       vmName,
+				Organization: organization,
+				Repo:         repo,
+				TmpPath:      u.tmpPath,
+				PluginPath:   u.pluginPath,
+				InstalledVMs: u.installedVMs,
+				VMStorage:    u.repository.VMs,
+				Installer:    u.installer,
+			})
+
+			fmt.Printf(
+				"Rebuilding binaries for %s v%v.%v.%v.\n",
+				fullVMName,
+				updatedVM.Version.Major,
+				updatedVM.Version.Minor,
+				updatedVM.Version.Patch,
+			)
+			if err := u.executor.Execute(installWorkflow); err != nil {
+				return err
+			}
+
+			updated = true
+		}
+	}
+
+	if !updated {
+		fmt.Printf("No changes detected.")
+		return nil
 	}
 
 	return nil
