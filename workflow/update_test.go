@@ -164,9 +164,31 @@ func TestUpdateExecute(t *testing.T) {
 			},
 		},
 		{
-			name: "success single repository",
+			name: "success single repository no update needed",
 			setup: func(mocks mocks) {
+				// iterator with only one key/value pair
+				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
+					itr := mockdb.NewMockIterator(mocks.ctrl)
+					defer itr.EXPECT().Release()
 
+					itr.EXPECT().Next().Return(true)
+					itr.EXPECT().Key().Return([]byte(alias))
+
+					itr.EXPECT().Value().Return(sourceInfoBytes)
+					itr.EXPECT().Next().Return(false)
+
+					return *storage.NewIterator[storage.SourceInfo](itr)
+				})
+
+				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, mainBranch, &mocks.auth).Return(previousCommit, nil)
+			},
+			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
+				return assert.NoError(t, err)
+			},
+		},
+		{
+			name: "success single repository updates",
+			setup: func(mocks mocks) {
 				// iterator with only one key/value pair
 				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
 					itr := mockdb.NewMockIterator(mocks.ctrl)
@@ -205,7 +227,7 @@ func TestUpdateExecute(t *testing.T) {
 				mocks.executor.EXPECT().Execute(wf).Return(nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return false
+				return assert.NoError(t, err)
 			},
 		},
 	}
