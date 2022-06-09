@@ -280,15 +280,6 @@ func loadFromYAML[T types.Definition](
 
 		registry.Repositories = append(registry.Repositories, string(repositoryAlias))
 
-		// updatedRegistryBytes, err := yaml.Marshal(registry)
-		// if err != nil {
-		//	return err
-		// }
-		// updatedRecordBytes, err := yaml.Marshal(definition)
-		// if err != nil {
-		//	return err
-		// }
-
 		if err := globalDB.Put(aliasBytes, registry); err != nil {
 			return err
 		}
@@ -299,13 +290,6 @@ func loadFromYAML[T types.Definition](
 		fmt.Printf("Updated plugin definition in registry for %s:%s@%s.\n", repositoryAlias, alias, commit)
 	}
 
-	// if err := globalBatch.Write(); err != nil {
-	//	return err
-	// }
-	// if err := repoBatch.Write(); err != nil {
-	//	return err
-	// }
-	//
 	return nil
 }
 
