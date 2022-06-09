@@ -72,10 +72,10 @@ func New(fs afero.Fs) (*cobra.Command, error) {
 		PluginDir:        viper.GetString(pluginPathKey),
 		Fs:               fs,
 	})
-
 	if err != nil {
 		return nil, err
 	}
+
 	rootCmd.AddCommand(
 		install(apm),
 		uninstall(apm),
@@ -100,7 +100,7 @@ func initializeConfig() error {
 }
 
 // If we need to use custom git credentials (say for private repos).
-// nil credentials is safe to use.
+// the zero value for credentials is safe to use.
 func getCredentials() (http.BasicAuth, error) {
 	result := http.BasicAuth{}
 
