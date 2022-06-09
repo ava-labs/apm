@@ -30,7 +30,7 @@ func TestUpdateExecute(t *testing.T) {
 	)
 
 	var (
-		errWrong = fmt.Errorf("sopmething went wrong")
+		errWrong = fmt.Errorf("something went wrong")
 
 		previousCommit  = plumbing.Hash{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
 		latestCommit    = plumbing.Hash{2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2}
