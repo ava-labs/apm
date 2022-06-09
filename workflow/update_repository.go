@@ -96,6 +96,61 @@ type UpdateRepository struct {
 	fs        afero.Fs
 }
 
+func (u *UpdateRepository) Execute() error {
+	if err := u.updateDefinitions(); err != nil {
+		fmt.Printf("Unexpected error while updating definitions. %s", err)
+		return err
+	}
+
+	if err := u.updateVMs(); err != nil {
+		fmt.Printf("Unexpected error while updating vms. %s", err)
+		return err
+	}
+
+	// checkpoint progress
+	updatedMetadata := storage.SourceInfo{
+		Alias:  u.repositoryMetadata.Alias,
+		URL:    u.repositoryMetadata.URL,
+		Commit: u.latestCommit,
+	}
+	if err := u.sourcesList.Put(u.aliasBytes, updatedMetadata); err != nil {
+		return err
+	}
+
+	fmt.Printf("Finished update.\n")
+
+	return nil
+}
+
+func (u *UpdateRepository) updateDefinitions() error {
+	vmsPath := filepath.Join(u.repositoryPath, vmDir)
+
+	if err := loadFromYAML[types.VM](u.fs, vmKey, vmsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.VMs); err != nil {
+		return err
+	}
+
+	subnetsPath := filepath.Join(u.repositoryPath, subnetDir)
+	if err := loadFromYAML[types.Subnet](u.fs, subnetKey, subnetsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.Subnets); err != nil {
+		return err
+	}
+
+	// Now we need to delete anything that wasn't updated in the latest commit
+	if err := deleteStaleDefinitions[types.VM](u.repository.VMs, u.latestCommit); err != nil {
+		return err
+	}
+	if err := deleteStaleDefinitions[types.Subnet](u.repository.Subnets, u.latestCommit); err != nil {
+		return err
+	}
+
+	if u.previousCommit == plumbing.ZeroHash {
+		fmt.Printf("Finished initializing definitions for%s@%s.\n", u.repoName, u.latestCommit)
+	} else {
+		fmt.Printf("Finished updating definitions from %s to %s@%s.\n", u.previousCommit, u.repoName, u.latestCommit)
+	}
+
+	return nil
+}
+
 func (u *UpdateRepository) updateVMs() error {
 	updated := false
 
@@ -164,61 +219,6 @@ func (u *UpdateRepository) updateVMs() error {
 	if !updated {
 		fmt.Printf("No changes detected.")
 		return nil
-	}
-
-	return nil
-}
-
-func (u *UpdateRepository) Execute() error {
-	if err := u.updateDefinitions(); err != nil {
-		fmt.Printf("Unexpected error while updating definitions. %s", err)
-		return err
-	}
-
-	if err := u.updateVMs(); err != nil {
-		fmt.Printf("Unexpected error while updating vms. %s", err)
-		return err
-	}
-
-	// checkpoint progress
-	updatedMetadata := storage.SourceInfo{
-		Alias:  u.repositoryMetadata.Alias,
-		URL:    u.repositoryMetadata.URL,
-		Commit: u.latestCommit,
-	}
-	if err := u.sourcesList.Put(u.aliasBytes, updatedMetadata); err != nil {
-		return err
-	}
-
-	fmt.Printf("Finished update.\n")
-
-	return nil
-}
-
-func (u *UpdateRepository) updateDefinitions() error {
-	vmsPath := filepath.Join(u.repositoryPath, vmDir)
-
-	if err := loadFromYAML[types.VM](u.fs, vmKey, vmsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.VMs); err != nil {
-		return err
-	}
-
-	subnetsPath := filepath.Join(u.repositoryPath, subnetDir)
-	if err := loadFromYAML[types.Subnet](u.fs, subnetKey, subnetsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.Subnets); err != nil {
-		return err
-	}
-
-	// Now we need to delete anything that wasn't updated in the latest commit
-	if err := deleteStalePlugins[types.VM](u.repository.VMs, u.latestCommit); err != nil {
-		return err
-	}
-	if err := deleteStalePlugins[types.Subnet](u.repository.Subnets, u.latestCommit); err != nil {
-		return err
-	}
-
-	if u.previousCommit == plumbing.ZeroHash {
-		fmt.Printf("Finished initializing definitions for%s@%s.\n", u.repoName, u.latestCommit)
-	} else {
-		fmt.Printf("Finished updating definitions from %s to %s@%s.\n", u.previousCommit, u.repoName, u.latestCommit)
 	}
 
 	return nil
@@ -297,7 +297,7 @@ func loadFromYAML[T types.Definition](
 	return nil
 }
 
-func deleteStalePlugins[T types.Definition](db storage.Storage[storage.Definition[T]], latestCommit plumbing.Hash) error {
+func deleteStaleDefinitions[T types.Definition](db storage.Storage[storage.Definition[T]], latestCommit plumbing.Hash) error {
 	itr := db.Iterator()
 	// TODO batching
 
