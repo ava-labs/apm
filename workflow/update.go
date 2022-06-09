@@ -83,13 +83,9 @@ func (u Update) Execute() error {
 		if err != nil {
 			return err
 		}
+		previousCommit := sourceInfo.Commit
 		repositoryPath := filepath.Join(u.repositoriesPath, organization, repo)
 		latestCommit, err := u.gitFactory.GetRepository(sourceInfo.URL, repositoryPath, mainBranch, &u.auth)
-		if err != nil {
-			return err
-		}
-
-		previousCommit := sourceInfo.Commit
 		if err != nil {
 			return err
 		}
