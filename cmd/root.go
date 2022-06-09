@@ -61,27 +61,12 @@ func New(fs afero.Fs) (*cobra.Command, error) {
 		return nil, errs.Err
 	}
 
-	credentials, err := getCredentials()
-	if err != nil {
-		return nil, err
-	}
-	apm, err := apm.New(apm.Config{
-		Directory:        viper.GetString(apmPathKey),
-		Auth:             credentials,
-		AdminApiEndpoint: viper.GetString(adminApiEndpointKey),
-		PluginDir:        viper.GetString(pluginPathKey),
-		Fs:               fs,
-	})
-	if err != nil {
-		return nil, err
-	}
-
 	rootCmd.AddCommand(
-		install(apm),
-		uninstall(apm),
-		update(apm),
-		listRepositories(apm),
-		joinSubnet(apm),
+		install(fs),
+		uninstall(fs),
+		update(fs),
+		listRepositories(fs),
+		joinSubnet(fs),
 	)
 
 	return rootCmd, nil
@@ -101,7 +86,7 @@ func initializeConfig() error {
 
 // If we need to use custom git credentials (say for private repos).
 // the zero value for credentials is safe to use.
-func getCredentials() (http.BasicAuth, error) {
+func initCredentials() (http.BasicAuth, error) {
 	result := http.BasicAuth{}
 
 	if viper.IsSet(credentialsFileKey) {
@@ -120,4 +105,19 @@ func getCredentials() (http.BasicAuth, error) {
 	}
 
 	return result, nil
+}
+
+func initAPM(fs afero.Fs) (*apm.APM, error) {
+	credentials, err := initCredentials()
+	if err != nil {
+		return nil, err
+	}
+
+	return apm.New(apm.Config{
+		Directory:        viper.GetString(apmPathKey),
+		Auth:             credentials,
+		AdminApiEndpoint: viper.GetString(adminApiEndpointKey),
+		PluginDir:        viper.GetString(pluginPathKey),
+		Fs:               fs,
+	})
 }

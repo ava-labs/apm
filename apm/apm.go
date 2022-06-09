@@ -277,14 +277,15 @@ func (a *APM) Update() error {
 		Executor:         a.engine,
 		Registry:         a.registry,
 		InstalledVMs:     a.installedVMs,
+		SourcesList:      a.sourcesList,
 		DB:               a.db,
 		TmpPath:          a.tmpPath,
 		PluginPath:       a.pluginPath,
 		Installer:        a.installer,
-		SourcesList:      a.sourcesList,
 		RepositoriesPath: a.repositoriesPath,
 		Auth:             a.auth,
 		GitFactory:       git.RepositoryFactory{},
+		RepoFactory:      storage.NewRepositoryFactory(a.db),
 	})
 
 	if err := a.engine.Execute(workflow); err != nil {

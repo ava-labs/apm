@@ -1,12 +1,11 @@
 package cmd
 
 import (
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-
-	"github.com/ava-labs/apm/apm"
 )
 
-func joinSubnet(apm *apm.APM) *cobra.Command {
+func joinSubnet(fs afero.Fs) *cobra.Command {
 	subnetAlias := ""
 
 	command := &cobra.Command{
@@ -16,6 +15,11 @@ func joinSubnet(apm *apm.APM) *cobra.Command {
 
 	command.PersistentFlags().StringVar(&subnetAlias, "subnet-alias", "", "subnet alias to join")
 	command.RunE = func(_ *cobra.Command, _ []string) error {
+		apm, err := initAPM(fs)
+		if err != nil {
+			return err
+		}
+
 		return apm.JoinSubnet(subnetAlias)
 	}
 

@@ -1,12 +1,11 @@
 package cmd
 
 import (
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-
-	"github.com/ava-labs/apm/apm"
 )
 
-func uninstall(apm *apm.APM) *cobra.Command {
+func uninstall(fs afero.Fs) *cobra.Command {
 	vmAlias := ""
 	command := &cobra.Command{
 		Use:   "uninstall-vm",
@@ -14,6 +13,11 @@ func uninstall(apm *apm.APM) *cobra.Command {
 	}
 	command.PersistentFlags().StringVar(&vmAlias, "vm-alias", "", "vm alias to install")
 	command.RunE = func(_ *cobra.Command, _ []string) error {
+		apm, err := initAPM(fs)
+		if err != nil {
+			return err
+		}
+
 		return apm.Uninstall(vmAlias)
 	}
 
