@@ -12,6 +12,8 @@ import (
 type Installer interface {
 	Download(url string, path string) error
 	Decompress(source string, dest string) error
+	// Install installs the VM. installScriptPath is a path relative to
+	// workingDir.
 	Install(workingDir string, installScriptPath string) error
 }
 
