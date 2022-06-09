@@ -9,6 +9,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/golang/mock/gomock"
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/yaml.v3"
 
@@ -46,6 +47,8 @@ func TestUpdateExecute(t *testing.T) {
 			URL:    url,
 			Commit: previousCommit,
 		}
+
+		fs = afero.NewMemMapFs()
 	)
 
 	sourceInfoBytes, err := yaml.Marshal(sourceInfo)
@@ -149,6 +152,7 @@ func TestUpdateExecute(t *testing.T) {
 					TmpPath:        tmpPath,
 					PluginPath:     pluginPath,
 					Installer:      mocks.installer,
+					Fs:             fs,
 				})
 
 				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, mainBranch, &mocks.auth).Return(latestCommit, nil)
@@ -193,6 +197,7 @@ func TestUpdateExecute(t *testing.T) {
 					TmpPath:        tmpPath,
 					PluginPath:     pluginPath,
 					Installer:      mocks.installer,
+					Fs:             fs,
 				})
 
 				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, mainBranch, &mocks.auth).Return(latestCommit, nil)
@@ -250,6 +255,7 @@ func TestUpdateExecute(t *testing.T) {
 					Auth:             auth,
 					GitFactory:       gitFactory,
 					RepoFactory:      repoFactory,
+					Fs:               fs,
 				},
 			)
 			test.wantErr(t, wf.Execute())

@@ -8,6 +8,7 @@ import (
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/spf13/afero"
 
 	"github.com/ava-labs/apm/git"
 	"github.com/ava-labs/apm/storage"
@@ -33,6 +34,7 @@ type UpdateConfig struct {
 	Auth             http.BasicAuth
 	GitFactory       git.Factory
 	RepoFactory      storage.RepositoryFactory
+	Fs               afero.Fs
 }
 
 func NewUpdate(config UpdateConfig) *Update {
@@ -49,6 +51,7 @@ func NewUpdate(config UpdateConfig) *Update {
 		auth:             config.Auth,
 		gitFactory:       config.GitFactory,
 		repoFactory:      config.RepoFactory,
+		fs:               config.Fs,
 	}
 }
 
@@ -65,6 +68,7 @@ type Update struct {
 	repositoriesPath string
 	gitFactory       git.Factory
 	repoFactory      storage.RepositoryFactory
+	fs               afero.Fs
 }
 
 func (u Update) Execute() error {
@@ -111,6 +115,7 @@ func (u Update) Execute() error {
 			TmpPath:        u.tmpPath,
 			PluginPath:     u.pluginPath,
 			Installer:      u.installer,
+			Fs:             u.fs,
 		})
 
 		if err := u.executor.Execute(workflow); err != nil {

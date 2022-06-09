@@ -286,6 +286,7 @@ func (a *APM) Update() error {
 		Auth:             a.auth,
 		GitFactory:       git.RepositoryFactory{},
 		RepoFactory:      storage.NewRepositoryFactory(a.db),
+		Fs:               a.fs,
 	})
 
 	if err := a.engine.Execute(workflow); err != nil {

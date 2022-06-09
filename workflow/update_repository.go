@@ -2,12 +2,12 @@ package workflow
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/version"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
 
 	"github.com/ava-labs/apm/storage"
@@ -46,6 +46,7 @@ type UpdateRepositoryConfig struct {
 	TmpPath    string
 	PluginPath string
 	Installer  Installer
+	Fs         afero.Fs
 }
 
 func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
@@ -65,6 +66,7 @@ func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
 		tmpPath:            config.TmpPath,
 		pluginPath:         config.PluginPath,
 		installer:          config.Installer,
+		fs:                 config.Fs,
 	}
 }
 
@@ -91,6 +93,7 @@ type UpdateRepository struct {
 	pluginPath string
 
 	installer Installer
+	fs        afero.Fs
 }
 
 func (u *UpdateRepository) updateVMs() error {
@@ -195,12 +198,12 @@ func (u *UpdateRepository) Execute() error {
 func (u *UpdateRepository) updateDefinitions() error {
 	vmsPath := filepath.Join(u.repositoryPath, vmDir)
 
-	if err := loadFromYAML[types.VM](vmKey, vmsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.VMs); err != nil {
+	if err := loadFromYAML[types.VM](u.fs, vmKey, vmsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.VMs); err != nil {
 		return err
 	}
 
 	subnetsPath := filepath.Join(u.repositoryPath, subnetDir)
-	if err := loadFromYAML[types.Subnet](subnetKey, subnetsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.Subnets); err != nil {
+	if err := loadFromYAML[types.Subnet](u.fs, subnetKey, subnetsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.Subnets); err != nil {
 		return err
 	}
 
@@ -222,6 +225,7 @@ func (u *UpdateRepository) updateDefinitions() error {
 }
 
 func loadFromYAML[T types.Definition](
+	fs afero.Fs,
 	key string,
 	path string,
 	repositoryAlias []byte,
@@ -229,7 +233,7 @@ func loadFromYAML[T types.Definition](
 	globalDB storage.Storage[storage.RepoList],
 	repoDB storage.Storage[storage.Definition[T]],
 ) error {
-	files, err := os.ReadDir(path)
+	files, err := afero.ReadDir(fs, path)
 	if err != nil {
 		return err
 	}
@@ -251,7 +255,7 @@ func loadFromYAML[T types.Definition](
 			continue
 		}
 
-		fileBytes, err := os.ReadFile(filepath.Join(path, file.Name()))
+		fileBytes, err := afero.ReadFile(fs, filepath.Join(path, file.Name()))
 		if err != nil {
 			return err
 		}
