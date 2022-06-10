@@ -259,7 +259,6 @@ func (u *UpdateRepository) updateVMs() error {
 		repoAlias, vmName := util.ParseQualifiedName(fullVMName)
 		organization, repo := util.ParseAlias(repoAlias)
 
-		// weird hack for generics to make the go compiler happy.
 		var definition storage.Definition[types.VM]
 
 		vmStorage := u.repository.VMs

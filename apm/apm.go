@@ -209,7 +209,6 @@ func (a *APM) joinSubnet(fullName string) error {
 	repoRegistry := a.repoFactory.GetRepository([]byte(alias))
 
 	var (
-		// weird hack for generics
 		definition storage.Definition[types.Subnet]
 		err        error
 	)
@@ -219,10 +218,6 @@ func (a *APM) joinSubnet(fullName string) error {
 		return err
 	}
 
-	// definition := &storage.Definition[types.Subnet]{}
-	// if err := yaml.Unmarshal(subnetBytes, definition); err != nil {
-	//	return err
-	// }
 	subnet := definition.Definition
 
 	// TODO prompt user, add force flag
