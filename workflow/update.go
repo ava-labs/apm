@@ -107,7 +107,6 @@ func (u Update) Execute() error {
 			SourceInfo:     sourceInfo,
 			SourcesList:    u.sourcesList,
 			InstalledVMs:   u.installedVMs,
-			DB:             u.db,
 			TmpPath:        u.tmpPath,
 			PluginPath:     u.pluginPath,
 			Installer:      u.installer,

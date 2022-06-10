@@ -41,8 +41,6 @@ type UpdateRepositoryConfig struct {
 	SourcesList  storage.Storage[storage.SourceInfo]
 	InstalledVMs storage.Storage[version.Semantic]
 
-	DB database.Database
-
 	TmpPath    string
 	PluginPath string
 	Installer  Installer
@@ -62,7 +60,6 @@ func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
 		repositoryMetadata: config.SourceInfo,
 		installedVMs:       config.InstalledVMs,
 		sourcesList:        config.SourcesList,
-		db:                 config.DB,
 		tmpPath:            config.TmpPath,
 		pluginPath:         config.PluginPath,
 		installer:          config.Installer,
@@ -157,15 +154,15 @@ func loadFromYAML[T types.Definition](
 	path string,
 	repositoryAlias []byte,
 	commit plumbing.Hash,
-	globalDB storage.Storage[storage.RepoList],
-	repoDB storage.Storage[storage.Definition[T]],
+	registry storage.Storage[storage.RepoList],
+	repository storage.Storage[storage.Definition[T]],
 ) error {
 	files, err := afero.ReadDir(fs, path)
 	if err != nil {
 		return err
 	}
-	// globalBatch := globalDB.NewBatch()
-	// repoBatch := repoDB.NewBatch()
+	// globalBatch := registry.NewBatch()
+	// repoBatch := repository.NewBatch()
 
 	for _, file := range files {
 		if file.IsDir() {
@@ -199,22 +196,22 @@ func loadFromYAML[T types.Definition](
 		alias := data[key].Alias()
 		aliasBytes := []byte(alias)
 
-		registry := storage.RepoList{}
-		registry, err = globalDB.Get(aliasBytes)
+		repoList := storage.RepoList{}
+		repoList, err = registry.Get(aliasBytes)
 		if err == database.ErrNotFound {
-			registry = storage.RepoList{ // TODO check if this can be removed
+			repoList = storage.RepoList{ // TODO check if this can be removed
 				Repositories: []string{},
 			}
 		} else if err != nil {
 			return err
 		}
 
-		registry.Repositories = append(registry.Repositories, string(repositoryAlias))
+		repoList.Repositories = append(repoList.Repositories, string(repositoryAlias))
 
-		if err := globalDB.Put(aliasBytes, registry); err != nil {
+		if err := registry.Put(aliasBytes, repoList); err != nil {
 			return err
 		}
-		if err := repoDB.Put(aliasBytes, definition); err != nil {
+		if err := repository.Put(aliasBytes, definition); err != nil {
 			return err
 		}
 
@@ -226,6 +223,7 @@ func loadFromYAML[T types.Definition](
 
 func deleteStaleDefinitions[T types.Definition](db storage.Storage[storage.Definition[T]], latestCommit plumbing.Hash) error {
 	itr := db.Iterator()
+	defer itr.Release()
 	// TODO batching
 
 	for itr.Next() {
