@@ -189,7 +189,3 @@ func TestDatabase_Delete(t *testing.T) {
 		})
 	}
 }
-
-func TestDatabase_Iterator(t *testing.T) {
-	t.Skip("Not tested yet.")
-}

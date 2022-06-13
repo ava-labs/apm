@@ -79,11 +79,7 @@ func New(config Config) (*APM, error) {
 		sourcesList:      storage.NewSourceInfo(db),
 		installedVMs:     storage.NewInstalledVMs(db),
 		auth:             config.Auth,
-		adminClient: admin.NewHttpClient(
-			admin.HttpClientConfig{
-				Endpoint: fmt.Sprintf("http://%s", config.AdminApiEndpoint),
-			},
-		),
+		adminClient:      admin.NewClient(fmt.Sprintf("http://%s", config.AdminApiEndpoint)),
 		installer: workflow.NewVMInstaller(
 			workflow.VMInstallerConfig{
 				Fs:        config.Fs,
