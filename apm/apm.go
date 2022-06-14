@@ -15,7 +15,6 @@ import (
 	"github.com/ava-labs/avalanchego/database/leveldb"
 	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/perms"
-	"github.com/ava-labs/avalanchego/version"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/spf13/afero"
@@ -48,7 +47,7 @@ type APM struct {
 	db database.Database
 
 	sourcesList  storage.Storage[storage.SourceInfo]
-	installedVMs storage.Storage[version.Semantic]
+	installedVMs storage.Storage[storage.InstallInfo]
 	registry     storage.Storage[storage.RepoList]
 	repoFactory  storage.RepositoryFactory
 
@@ -191,6 +190,8 @@ func (a *APM) uninstall(name string) error {
 			RepoAlias:    alias,
 			VMStorage:    repository.VMs,
 			InstalledVMs: a.installedVMs,
+			Fs:           a.fs,
+			PluginPath:   a.pluginPath,
 		},
 	)
 

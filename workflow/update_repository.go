@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/ava-labs/avalanchego/database"
-	"github.com/ava-labs/avalanchego/version"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
@@ -42,7 +41,7 @@ type UpdateRepositoryConfig struct {
 	Repository   storage.Repository
 	Registry     storage.Storage[storage.RepoList]
 	SourcesList  storage.Storage[storage.SourceInfo]
-	InstalledVMs storage.Storage[version.Semantic]
+	InstalledVMs storage.Storage[storage.InstallInfo]
 
 	TmpPath    string
 	PluginPath string
@@ -85,7 +84,7 @@ type UpdateRepository struct {
 
 	repositoryMetadata storage.SourceInfo
 
-	installedVMs storage.Storage[version.Semantic]
+	installedVMs storage.Storage[storage.InstallInfo]
 	sourcesList  storage.Storage[storage.SourceInfo]
 
 	tmpPath    string
@@ -252,7 +251,7 @@ func (u *UpdateRepository) updateVMs() error {
 
 	for itr.Next() {
 		fullVMName := string(itr.Key())
-		installedVersion, err := itr.Value()
+		installInfo, err := itr.Value()
 		if err != nil {
 			return err
 		}
@@ -270,13 +269,13 @@ func (u *UpdateRepository) updateVMs() error {
 
 		updatedVM := definition.Definition
 
-		if installedVersion.Compare(updatedVM.Version) < 0 {
+		if installInfo.Version.Compare(updatedVM.Version) < 0 {
 			fmt.Printf(
 				"Detected an update for %s from v%v.%v.%v to v%v.%v.%v.\n",
 				fullVMName,
-				installedVersion.Major,
-				installedVersion.Minor,
-				installedVersion.Patch,
+				installInfo.Version.Major,
+				installInfo.Version.Minor,
+				installInfo.Version.Patch,
 				updatedVM.Version.Major,
 				updatedVM.Version.Minor,
 				updatedVM.Version.Patch,

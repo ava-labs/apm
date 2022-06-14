@@ -4,6 +4,7 @@
 package storage
 
 import (
+	"github.com/ava-labs/avalanchego/version"
 	"github.com/go-git/go-git/v5/plumbing"
 
 	"github.com/ava-labs/apm/types"
@@ -20,6 +21,11 @@ type SourceInfo struct {
 // e.g. foo/plugin, bar/plugin => plugin: [foo, bar]
 type RepoList struct {
 	Repositories []string `yaml:"repositories"`
+}
+
+type InstallInfo struct {
+	ID      string           `yaml:"id"`
+	Version version.Semantic `yaml:"version"`
 }
 
 // Definition stores a plugin definition alongside the plugin-repository's commit

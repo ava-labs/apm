@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/ava-labs/avalanchego/database"
-	"github.com/ava-labs/avalanchego/version"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/spf13/afero"
@@ -27,7 +26,7 @@ var (
 type UpdateConfig struct {
 	Executor         Executor
 	Registry         storage.Storage[storage.RepoList]
-	InstalledVMs     storage.Storage[version.Semantic]
+	InstalledVMs     storage.Storage[storage.InstallInfo]
 	SourcesList      storage.Storage[storage.SourceInfo]
 	DB               database.Database
 	TmpPath          string
@@ -62,7 +61,7 @@ type Update struct {
 	executor         Executor
 	db               database.Database
 	registry         storage.Storage[storage.RepoList]
-	installedVMs     storage.Storage[version.Semantic]
+	installedVMs     storage.Storage[storage.InstallInfo]
 	sourcesList      storage.Storage[storage.SourceInfo]
 	installer        Installer
 	auth             http.BasicAuth

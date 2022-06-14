@@ -6,11 +6,10 @@ package workflow
 import (
 	"errors"
 	"fmt"
-	"os"
+	"io/fs"
 	"path/filepath"
 
 	"github.com/ava-labs/avalanchego/utils/perms"
-	"github.com/ava-labs/avalanchego/version"
 	"github.com/spf13/afero"
 
 	"github.com/ava-labs/apm/storage"
@@ -27,7 +26,7 @@ type InstallConfig struct {
 	TmpPath      string
 	PluginPath   string
 
-	InstalledVMs storage.Storage[version.Semantic]
+	InstalledVMs storage.Storage[storage.InstallInfo]
 	VMStorage    storage.Storage[storage.Definition[types.VM]]
 	Fs           afero.Fs
 	Installer    Installer
@@ -56,7 +55,7 @@ type Install struct {
 	tmpPath      string
 	pluginPath   string
 
-	installedVMs storage.Storage[version.Semantic]
+	installedVMs storage.Storage[storage.InstallInfo]
 	vmStorage    storage.Storage[storage.Definition[types.VM]]
 	fs           afero.Fs
 	installer    Installer
@@ -84,8 +83,9 @@ func (i Install) Execute() error {
 		// TODO sometimes these aren't cleaned up if we fail before cleanup step
 		return err
 	}
+
 	// Create the directory we'll store the plugin sources in if it doesn't exist.
-	if _, err := i.fs.Stat(i.plugin); errors.Is(err, os.ErrNotExist) {
+	if _, err := i.fs.Stat(workingDir); errors.Is(err, fs.ErrNotExist) {
 		fmt.Printf("Creating sources directory...\n")
 		if err := i.fs.Mkdir(workingDir, perms.ReadWriteExecute); err != nil {
 			return err
@@ -123,10 +123,14 @@ func (i Install) Execute() error {
 	}
 
 	fmt.Printf("Adding virtual machine %s to installation registry...\n", vm.ID)
-	if err := i.installedVMs.Put([]byte(i.name), vm.Version); err != nil {
+	installInfo := storage.InstallInfo{
+		ID:      vm.ID,
+		Version: vm.Version,
+	}
+	if err := i.installedVMs.Put([]byte(i.name), installInfo); err != nil {
 		return err
 	}
 
-	fmt.Printf("Successfully installed %s@v%v.\n", i.name, vm.Version.Str)
+	fmt.Printf("Successfully installed %s@v%v.%v.%v in %s\n", i.name, vm.Version.Major, vm.Version.Minor, vm.Version.Patch, filepath.Join(i.pluginPath, vm.ID))
 	return nil
 }

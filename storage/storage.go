@@ -6,7 +6,6 @@ package storage
 import (
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/prefixdb"
-	"github.com/ava-labs/avalanchego/version"
 	"gopkg.in/yaml.v3"
 
 	"github.com/ava-labs/apm/types"
@@ -55,8 +54,8 @@ func NewRegistry(db database.Database) *Database[RepoList] {
 	}
 }
 
-func NewInstalledVMs(db database.Database) *Database[version.Semantic] {
-	return &Database[version.Semantic]{
+func NewInstalledVMs(db database.Database) *Database[InstallInfo] {
+	return &Database[InstallInfo]{
 		db: prefixdb.New(installedVMsPrefix, db),
 	}
 }

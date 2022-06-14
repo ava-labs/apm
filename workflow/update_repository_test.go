@@ -9,7 +9,6 @@ import (
 
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/ava-labs/avalanchego/utils/wrappers"
-	"github.com/ava-labs/avalanchego/version"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/golang/mock/gomock"
 	"github.com/spf13/afero"
@@ -125,7 +124,7 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 
 		registry     *storage.MockStorage[storage.RepoList]
 		sourcesList  *storage.MockStorage[storage.SourceInfo]
-		installedVMs *storage.MockStorage[version.Semantic]
+		installedVMs *storage.MockStorage[storage.InstallInfo]
 		vms          *storage.MockStorage[storage.Definition[types.VM]]
 		subnets      *storage.MockStorage[storage.Definition[types.Subnet]]
 
@@ -163,12 +162,12 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 
 					return *storage.NewIterator[storage.Definition[types.Subnet]](itr)
 				})
-				mocks.installedVMs.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[version.Semantic] {
+				mocks.installedVMs.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.InstallInfo] {
 					itr := mockdb.NewMockIterator(mocks.ctrl)
 					defer itr.EXPECT().Release()
 					itr.EXPECT().Next().Return(false)
 
-					return *storage.NewIterator[version.Semantic](itr)
+					return *storage.NewIterator[storage.InstallInfo](itr)
 				})
 				mocks.sourcesList.EXPECT().Put([]byte(alias), storage.SourceInfo{
 					Alias:  alias,
@@ -205,12 +204,12 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 
 					return *storage.NewIterator[storage.Definition[types.Subnet]](itr)
 				})
-				mocks.installedVMs.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[version.Semantic] {
+				mocks.installedVMs.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.InstallInfo] {
 					itr := mockdb.NewMockIterator(mocks.ctrl)
 					defer itr.EXPECT().Release()
 					itr.EXPECT().Next().Return(false)
 
-					return *storage.NewIterator[version.Semantic](itr)
+					return *storage.NewIterator[storage.InstallInfo](itr)
 				})
 				mocks.sourcesList.EXPECT().Put([]byte(alias), storage.SourceInfo{
 					Alias:  alias,
@@ -235,14 +234,14 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 			var (
 				registry     *storage.MockStorage[storage.RepoList]
 				sourcesList  *storage.MockStorage[storage.SourceInfo]
-				installedVMs *storage.MockStorage[version.Semantic]
+				installedVMs *storage.MockStorage[storage.InstallInfo]
 				vms          *storage.MockStorage[storage.Definition[types.VM]]
 				subnets      *storage.MockStorage[storage.Definition[types.Subnet]]
 			)
 
 			registry = storage.NewMockStorage[storage.RepoList](ctrl)
 			sourcesList = storage.NewMockStorage[storage.SourceInfo](ctrl)
-			installedVMs = storage.NewMockStorage[version.Semantic](ctrl)
+			installedVMs = storage.NewMockStorage[storage.InstallInfo](ctrl)
 			vms = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
 			subnets = storage.NewMockStorage[storage.Definition[types.Subnet]](ctrl)
 

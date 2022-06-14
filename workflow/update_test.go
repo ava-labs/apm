@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ava-labs/avalanchego/version"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/golang/mock/gomock"
@@ -65,7 +64,7 @@ func TestUpdateExecute(t *testing.T) {
 		ctrl         *gomock.Controller
 		executor     *MockExecutor
 		registry     *storage.MockStorage[storage.RepoList]
-		installedVMs *storage.MockStorage[version.Semantic]
+		installedVMs *storage.MockStorage[storage.InstallInfo]
 		sourcesList  *storage.MockStorage[storage.SourceInfo]
 		db           *mockdb.MockDatabase
 		installer    *MockInstaller
@@ -235,7 +234,7 @@ func TestUpdateExecute(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
 			var registry *storage.MockStorage[storage.RepoList]
-			var installedVMs *storage.MockStorage[version.Semantic]
+			var installedVMs *storage.MockStorage[storage.InstallInfo]
 			var sourcesList *storage.MockStorage[storage.SourceInfo]
 
 			executor := NewMockExecutor(ctrl)
@@ -245,7 +244,7 @@ func TestUpdateExecute(t *testing.T) {
 			repoFactory := storage.NewMockRepositoryFactory(ctrl)
 
 			registry = storage.NewMockStorage[storage.RepoList](ctrl)
-			installedVMs = storage.NewMockStorage[version.Semantic](ctrl)
+			installedVMs = storage.NewMockStorage[storage.InstallInfo](ctrl)
 			sourcesList = storage.NewMockStorage[storage.SourceInfo](ctrl)
 
 			test.setup(mocks{
