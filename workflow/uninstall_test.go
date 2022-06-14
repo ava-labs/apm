@@ -17,6 +17,8 @@ import (
 
 func TestUninstallExecute(t *testing.T) {
 	errWrong := fmt.Errorf("something went wrong")
+	pluginBytes := []byte("vm")
+	nameBytes := []byte("organization/repository:vm")
 
 	type mocks struct {
 		vmStorage    *storage.MockStorage[storage.Definition[types.VM]]
@@ -30,7 +32,7 @@ func TestUninstallExecute(t *testing.T) {
 		{
 			name: "can't read from installed vms",
 			setup: func(mocks mocks) {
-				mocks.installedVMs.EXPECT().Has([]byte("name")).Return(false, errWrong)
+				mocks.installedVMs.EXPECT().Has(nameBytes).Return(false, errWrong)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Equal(t, err, errWrong)
@@ -39,7 +41,7 @@ func TestUninstallExecute(t *testing.T) {
 		{
 			name: "vm already uninstalled",
 			setup: func(mocks mocks) {
-				mocks.installedVMs.EXPECT().Has([]byte("name")).Return(false, nil)
+				mocks.installedVMs.EXPECT().Has(nameBytes).Return(false, nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Nil(t, err)
@@ -48,8 +50,8 @@ func TestUninstallExecute(t *testing.T) {
 		{
 			name: "can't read from repository vms",
 			setup: func(mocks mocks) {
-				mocks.installedVMs.EXPECT().Has([]byte("name")).Return(true, nil)
-				mocks.vmStorage.EXPECT().Has([]byte("plugin")).Return(false, errWrong)
+				mocks.installedVMs.EXPECT().Has(nameBytes).Return(true, nil)
+				mocks.vmStorage.EXPECT().Has(pluginBytes).Return(false, errWrong)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Equal(t, errWrong, err)
@@ -58,19 +60,20 @@ func TestUninstallExecute(t *testing.T) {
 		{
 			name: "uninstalling an invalid vm",
 			setup: func(mocks mocks) {
-				mocks.installedVMs.EXPECT().Has([]byte("name")).Return(true, nil)
-				mocks.vmStorage.EXPECT().Has([]byte("plugin")).Return(false, nil)
+				mocks.installedVMs.EXPECT().Has(nameBytes).Return(true, nil)
+				mocks.vmStorage.EXPECT().Has(pluginBytes).Return(false, nil)
+				mocks.installedVMs.EXPECT().Delete(nameBytes).Return(nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.Error(t, err)
+				return assert.Nil(t, err)
 			},
 		},
 		{
 			name: "removing from installation registry fails",
 			setup: func(mocks mocks) {
-				mocks.installedVMs.EXPECT().Has([]byte("name")).Return(true, nil)
-				mocks.vmStorage.EXPECT().Has([]byte("plugin")).Return(true, nil)
-				mocks.installedVMs.EXPECT().Delete([]byte("name")).Return(errWrong)
+				mocks.installedVMs.EXPECT().Has(nameBytes).Return(true, nil)
+				mocks.vmStorage.EXPECT().Has(pluginBytes).Return(true, nil)
+				mocks.installedVMs.EXPECT().Delete(nameBytes).Return(errWrong)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Equal(t, errWrong, err)
@@ -79,9 +82,9 @@ func TestUninstallExecute(t *testing.T) {
 		{
 			name: "success",
 			setup: func(mocks mocks) {
-				mocks.installedVMs.EXPECT().Has([]byte("name")).Return(true, nil)
-				mocks.vmStorage.EXPECT().Has([]byte("plugin")).Return(true, nil)
-				mocks.installedVMs.EXPECT().Delete([]byte("name")).Return(nil)
+				mocks.installedVMs.EXPECT().Has(nameBytes).Return(true, nil)
+				mocks.vmStorage.EXPECT().Has(pluginBytes).Return(true, nil)
+				mocks.installedVMs.EXPECT().Delete(nameBytes).Return(nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Nil(t, err)
@@ -106,9 +109,9 @@ func TestUninstallExecute(t *testing.T) {
 
 			wf := NewUninstall(
 				UninstallConfig{
-					Name:         "name",
-					Plugin:       "plugin",
-					RepoAlias:    "repoAlias",
+					Name:         "organization/repository:vm",
+					Plugin:       "vm",
+					RepoAlias:    "organization/repository",
 					VMStorage:    vmStorage,
 					InstalledVMs: installedVMs,
 				},

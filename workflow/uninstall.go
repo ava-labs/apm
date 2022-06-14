@@ -56,7 +56,11 @@ func (u Uninstall) Execute() error {
 		return err
 	}
 	if !ok {
-		return fmt.Errorf(fmt.Sprintf("Virtual machine %s doesn't exist under the repository for %s.", u.plugin, u.repoAlias))
+		// If we don't have the definition, provide a warning log. It's possible
+		// this used to exist and was removed for whatever reason. In that case,
+		// we should still remove it from our installation registry to unblock
+		// the user.
+		fmt.Printf("Virtual machine %s doesn't exist under the repository for %s. Continuing uninstall anyways...\n", u.plugin, u.repoAlias)
 	}
 
 	if err := u.installedVMs.Delete([]byte(u.name)); err != nil {
