@@ -31,7 +31,7 @@ const (
 	apmPathKey          = "apm-path"
 	pluginPathKey       = "plugin-path"
 	credentialsFileKey  = "credentials-file"
-	adminApiEndpointKey = "admin-api-endpoint"
+	adminAPIEndpointKey = "admin-api-endpoint"
 )
 
 func New(fs afero.Fs) (*cobra.Command, error) {
@@ -50,7 +50,7 @@ func New(fs afero.Fs) (*cobra.Command, error) {
 	rootCmd.PersistentFlags().String(apmPathKey, apmDir, "path to the directory apm creates its artifacts")
 	rootCmd.PersistentFlags().String(pluginPathKey, filepath.Join(goPath, "src", "github.com", "ava-labs", "avalanchego", "build", "plugins"), "path to avalanche plugin directory")
 	rootCmd.PersistentFlags().String(credentialsFileKey, "", "path to credentials file")
-	rootCmd.PersistentFlags().String(adminApiEndpointKey, "127.0.0.1:9650/ext/admin", "endpoint for the avalanche admin api")
+	rootCmd.PersistentFlags().String(adminAPIEndpointKey, "127.0.0.1:9650/ext/admin", "endpoint for the avalanche admin api")
 
 	errs := wrappers.Errs{}
 	errs.Add(
@@ -58,7 +58,7 @@ func New(fs afero.Fs) (*cobra.Command, error) {
 		viper.BindPFlag(apmPathKey, rootCmd.PersistentFlags().Lookup(apmPathKey)),
 		viper.BindPFlag(pluginPathKey, rootCmd.PersistentFlags().Lookup(pluginPathKey)),
 		viper.BindPFlag(credentialsFileKey, rootCmd.PersistentFlags().Lookup(credentialsFileKey)),
-		viper.BindPFlag(adminApiEndpointKey, rootCmd.PersistentFlags().Lookup(adminApiEndpointKey)),
+		viper.BindPFlag(adminAPIEndpointKey, rootCmd.PersistentFlags().Lookup(adminAPIEndpointKey)),
 	)
 	if errs.Errored() {
 		return nil, errs.Err
@@ -119,7 +119,7 @@ func initAPM(fs afero.Fs) (*apm.APM, error) {
 	return apm.New(apm.Config{
 		Directory:        viper.GetString(apmPathKey),
 		Auth:             credentials,
-		AdminApiEndpoint: viper.GetString(adminApiEndpointKey),
+		AdminAPIEndpoint: viper.GetString(adminAPIEndpointKey),
 		PluginDir:        viper.GetString(pluginPathKey),
 		Fs:               fs,
 	})

@@ -4,9 +4,9 @@
 package types
 
 type Definition interface {
-	ID() string
-	Alias() string
-	Homepage() string
-	Description() string
-	Maintainers() []string
+	GetID() string
+	GetAlias() string
+	GetHomepage() string
+	GetDescription() string
+	GetMaintainers() []string
 }

@@ -22,11 +22,11 @@ import (
 func TestInstallExecute(t *testing.T) {
 	definition := storage.Definition[types.VM]{
 		Definition: types.VM{
-			ID_:           "id",
-			Alias_:        "alias",
-			Homepage_:     "homepage",
-			Description_:  "description",
-			Maintainers_:  []string{"joshua", "kim"},
+			ID:            "id",
+			Alias:         "alias",
+			Homepage:      "homepage",
+			Description:   "description",
+			Maintainers:   []string{"joshua", "kim"},
 			InstallScript: "./path/to/install/script.sh",
 			BinaryPath:    "./path/to/binary",
 			URL:           "www.website.com",
@@ -39,11 +39,11 @@ func TestInstallExecute(t *testing.T) {
 
 	noInstallScriptDefinition := storage.Definition[types.VM]{
 		Definition: types.VM{
-			ID_:           "id",
-			Alias_:        "alias",
-			Homepage_:     "homepage",
-			Description_:  "description",
-			Maintainers_:  []string{"joshua", "kim"},
+			ID:            "id",
+			Alias:         "alias",
+			Homepage:      "homepage",
+			Description:   "description",
+			Maintainers:   []string{"joshua", "kim"},
 			InstallScript: "", // no install script
 			BinaryPath:    "./path/to/binary",
 			URL:           "www.website.com",

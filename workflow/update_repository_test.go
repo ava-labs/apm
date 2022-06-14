@@ -135,15 +135,14 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		setup   func(mocks)
+		setup   func(*testing.T, mocks)
 		wantErr assert.ErrorAssertionFunc
 	}{
 		{
 			name: "success: vm definitions updated",
-			setup: func(mocks mocks) {
+			setup: func(t *testing.T, mocks mocks) {
 				setupFs(mocks.fs)
-
-				afero.WriteFile(mocks.fs, filepath.Join(vmsPath, "vm-1.yaml"), vm, perms.ReadWrite)
+				assert.Nil(t, afero.WriteFile(mocks.fs, filepath.Join(vmsPath, "vm-1.yaml"), vm, perms.ReadWrite))
 
 				// update subnet definitions
 				mocks.registry.EXPECT().Get([]byte(spacesVM)).Return(storage.RepoList{Repositories: []string{}}, nil)
@@ -183,10 +182,9 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 		},
 		{
 			name: "success: subnet definitions updated",
-			setup: func(mocks mocks) {
+			setup: func(t *testing.T, mocks mocks) {
 				setupFs(mocks.fs)
-
-				afero.WriteFile(mocks.fs, filepath.Join(subnetsPath, "subnet-1.yaml"), subnet, perms.ReadWrite)
+				assert.Nil(t, afero.WriteFile(mocks.fs, filepath.Join(subnetsPath, "subnet-1.yaml"), subnet, perms.ReadWrite))
 
 				// update subnet definitions
 				mocks.registry.EXPECT().Get([]byte(spacesSubnet)).Return(storage.RepoList{Repositories: []string{}}, nil)
@@ -253,7 +251,7 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 				Subnets: subnets,
 			}
 
-			test.setup(mocks{
+			test.setup(t, mocks{
 				ctrl:         ctrl,
 				fs:           fs,
 				registry:     registry,

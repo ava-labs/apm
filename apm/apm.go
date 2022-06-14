@@ -4,7 +4,6 @@
 package apm
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,7 +39,7 @@ var (
 type Config struct {
 	Directory        string
 	Auth             http.BasicAuth
-	AdminApiEndpoint string
+	AdminAPIEndpoint string
 	PluginDir        string
 	Fs               afero.Fs
 }
@@ -73,7 +72,7 @@ func New(config Config) (*APM, error) {
 		return nil, err
 	}
 
-	var a = &APM{
+	a := &APM{
 		repositoriesPath: filepath.Join(config.Directory, repositoryDir),
 		tmpPath:          filepath.Join(config.Directory, tmpDir),
 		pluginPath:       config.PluginDir,
@@ -82,11 +81,11 @@ func New(config Config) (*APM, error) {
 		sourcesList:      storage.NewSourceInfo(db),
 		installedVMs:     storage.NewInstalledVMs(db),
 		auth:             config.Auth,
-		adminClient:      admin.NewClient(fmt.Sprintf("http://%s", config.AdminApiEndpoint)),
+		adminClient:      admin.NewClient(fmt.Sprintf("http://%s", config.AdminAPIEndpoint)),
 		installer: workflow.NewVMInstaller(
 			workflow.VMInstallerConfig{
 				Fs:        config.Fs,
-				UrlClient: url.NewHttpClient(),
+				URLClient: url.NewClient(),
 			},
 		),
 		engine:      engine.NewWorkflowEngine(),
@@ -136,7 +135,6 @@ func parseAndRun(alias string, registry storage.Storage[storage.RepoList], comma
 	}
 
 	return command(fullName)
-
 }
 
 func (a *APM) Install(alias string) error {
@@ -220,8 +218,8 @@ func (a *APM) joinSubnet(fullName string) error {
 	subnet := definition.Definition
 
 	// TODO prompt user, add force flag
-	fmt.Printf("Installing virtual machines for subnet %s.\n", subnet.ID())
-	for _, vm := range subnet.VMs_ {
+	fmt.Printf("Installing virtual machines for subnet %s.\n", subnet.GetID())
+	for _, vm := range subnet.VMs {
 		if err := a.Install(vm); err != nil {
 			return err
 		}
@@ -232,12 +230,12 @@ func (a *APM) joinSubnet(fullName string) error {
 		return err
 	}
 
-	fmt.Printf("Whitelisting subnet %s...\n", subnet.ID())
-	if err := a.adminClient.WhitelistSubnet(subnet.ID()); err != nil {
+	fmt.Printf("Whitelisting subnet %s...\n", subnet.GetID())
+	if err := a.adminClient.WhitelistSubnet(subnet.GetID()); err != nil {
 		return err
 	}
 
-	fmt.Printf("Finished installing virtual machines for subnet %s.\n", subnet.ID_)
+	fmt.Printf("Finished installing virtual machines for subnet %s.\n", subnet.ID)
 	return nil
 }
 
@@ -295,7 +293,7 @@ func (a *APM) AddRepository(alias string, url string) error {
 		workflow.AddRepositoryConfig{
 			SourcesList: a.sourcesList,
 			Alias:       alias,
-			Url:         url,
+			URL:         url,
 		},
 	)
 
@@ -359,7 +357,7 @@ func (a *APM) ListRepositories() error {
 			return err
 		}
 
-		fmt.Fprintln(w, fmt.Sprintf("%s\t%s", metadata.Alias, metadata.URL))
+		fmt.Fprintf(w, "%s\t%s\n", metadata.Alias, metadata.URL)
 	}
 	w.Flush()
 	return nil
@@ -377,7 +375,7 @@ func getFullNameForAlias(registry storage.Storage[storage.RepoList], alias strin
 	}
 
 	if len(repoList.Repositories) > 1 {
-		return "", errors.New(fmt.Sprintf("more than one match found for %s. Please specify the fully qualified name. Matches: %s.\n", alias, repoList.Repositories))
+		return "", fmt.Errorf("more than one match found for %s. Please specify the fully qualified name. Matches: %s", alias, repoList.Repositories)
 	}
 
 	return fmt.Sprintf("%s:%s", repoList.Repositories[0], alias), nil

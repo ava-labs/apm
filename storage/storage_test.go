@@ -80,6 +80,7 @@ func TestDatabase_Put(t *testing.T) {
 			key := []byte("key")
 			value := "value"
 			bytes, err := yaml.Marshal(&value)
+			assert.Nil(t, err)
 
 			db.EXPECT().Put(key, bytes).Return(test.err)
 

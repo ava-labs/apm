@@ -108,8 +108,8 @@ func (i Install) Execute() error {
 		fmt.Printf("No install script found for %s.\n", i.name)
 	}
 
-	fmt.Printf("Moving binary %s into plugin directory...\n", vm.ID_)
-	if err := i.fs.Rename(filepath.Join(workingDir, vm.BinaryPath), filepath.Join(i.pluginPath, vm.ID_)); err != nil {
+	fmt.Printf("Moving binary %s into plugin directory...\n", vm.ID)
+	if err := i.fs.Rename(filepath.Join(workingDir, vm.BinaryPath), filepath.Join(i.pluginPath, vm.ID)); err != nil {
 		return err
 	}
 
@@ -122,7 +122,7 @@ func (i Install) Execute() error {
 		return err
 	}
 
-	fmt.Printf("Adding virtual machine %s to installation registry...\n", vm.ID_)
+	fmt.Printf("Adding virtual machine %s to installation registry...\n", vm.ID)
 	if err := i.installedVMs.Put([]byte(i.name), vm.Version); err != nil {
 		return err
 	}

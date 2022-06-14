@@ -16,13 +16,32 @@ type Factory interface {
 	GetRepository(url string, path string, reference plumbing.ReferenceName, auth *http.BasicAuth) (plumbing.Hash, error)
 }
 
-type RepositoryFactory struct {
-}
+type RepositoryFactory struct{}
 
 func (f RepositoryFactory) GetRepository(url string, path string, reference plumbing.ReferenceName, auth *http.BasicAuth) (plumbing.Hash, error) {
 	var repo *git.Repository
-	if _, err := os.Stat(path); err == nil {
-		// already exists, we need to check out the latest changes
+
+	_, err := os.Stat(path)
+
+	switch err {
+	case nil:
+		// if we don't have the repo, we need to clone it
+		if os.IsNotExist(err) {
+			repo, err = git.PlainClone(path, false, &git.CloneOptions{
+				URL:           url,
+				ReferenceName: reference,
+				SingleBranch:  true,
+				Auth:          auth,
+				Progress:      io.Discard,
+			})
+			if err != nil {
+				return plumbing.ZeroHash, err
+			}
+		} else {
+			return plumbing.ZeroHash, err
+		}
+	default:
+		// already exists, so we need to check out the latest changes
 		repo, err = git.PlainOpen(path)
 		if err != nil {
 			return plumbing.ZeroHash, err
@@ -32,7 +51,7 @@ func (f RepositoryFactory) GetRepository(url string, path string, reference plum
 			return plumbing.ZeroHash, err
 		}
 		if err := worktree.Pull(
-			// ODO use fetch + checkout instead of pull
+			// TODO use fetch + checkout instead of pull
 			&git.PullOptions{
 				RemoteName:    "origin",
 				ReferenceName: reference,
@@ -43,20 +62,6 @@ func (f RepositoryFactory) GetRepository(url string, path string, reference plum
 		); err != nil && err != git.NoErrAlreadyUpToDate {
 			return plumbing.ZeroHash, err
 		}
-	} else if os.IsNotExist(err) {
-		// otherwise, we need to clone the repository
-		repo, err = git.PlainClone(path, false, &git.CloneOptions{
-			URL:           url,
-			ReferenceName: reference,
-			SingleBranch:  true,
-			Auth:          auth,
-			Progress:      io.Discard,
-		})
-		if err != nil {
-			return plumbing.ZeroHash, err
-		}
-	} else {
-		return plumbing.ZeroHash, err
 	}
 
 	head, err := repo.Head()

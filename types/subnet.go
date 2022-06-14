@@ -8,31 +8,31 @@ import "github.com/ava-labs/avalanchego/subnets"
 var _ Definition = &Subnet{}
 
 type Subnet struct {
-	ID_          string               `yaml:"id"`
-	Alias_       string               `yaml:"alias"`
-	Homepage_    string               `yaml:"homepage"`
-	Description_ string               `yaml:"description"`
-	Maintainers_ []string             `yaml:"maintainers"`
-	VMs_         []string             `yaml:"vms"`
-	Config_      subnets.SubnetConfig `yaml:"config,omitempty"`
+	ID          string               `yaml:"id"`
+	Alias       string               `yaml:"alias"`
+	Homepage    string               `yaml:"homepage"`
+	Description string               `yaml:"description"`
+	Maintainers []string             `yaml:"maintainers"`
+	VMs         []string             `yaml:"vms"`
+	Config      subnets.SubnetConfig `yaml:"config,omitempty"`
 }
 
-func (s Subnet) ID() string {
-	return s.ID_
+func (s Subnet) GetID() string {
+	return s.ID
 }
 
-func (s Subnet) Alias() string {
-	return s.Alias_
+func (s Subnet) GetAlias() string {
+	return s.Alias
 }
 
-func (s Subnet) Homepage() string {
-	return s.Homepage_
+func (s Subnet) GetHomepage() string {
+	return s.Homepage
 }
 
-func (s Subnet) Description() string {
-	return s.Description_
+func (s Subnet) GetDescription() string {
+	return s.Description
 }
 
-func (s Subnet) Maintainers() []string {
-	return s.Maintainers_
+func (s Subnet) GetMaintainers() []string {
+	return s.Maintainers
 }

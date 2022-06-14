@@ -4,30 +4,29 @@
 package url
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/cavaliergopher/grab/v3"
 )
 
-var _ Client = &HttpClient{}
+var _ Client = &client{}
 
 type Client interface {
 	Download(url string, path string) error
 }
 
-func NewHttpClient() *HttpClient {
-	return &HttpClient{
+func NewClient() Client {
+	return &client{
 		grab.NewClient(),
 	}
 }
 
-type HttpClient struct {
+type client struct {
 	client *grab.Client
 }
 
-func (h HttpClient) Download(url string, path string) error {
+func (h client) Download(url string, path string) error {
 	req, err := grab.NewRequest(path, url)
 	if err != nil {
 		return err
@@ -58,7 +57,7 @@ Loop:
 
 	// check for errors
 	if err := resp.Err(); err != nil {
-		return errors.New(fmt.Sprintf("Download failed: %s", err))
+		return fmt.Errorf("Download failed: %s", err)
 	}
 
 	return nil

@@ -10,30 +10,30 @@ import (
 	"github.com/ava-labs/avalanchego/ids"
 )
 
-var _ Client = &HttpClient{}
+var _ Client = &client{}
 
 type Client interface {
 	LoadVMs() error
 	WhitelistSubnet(subnetID string) error
 }
 
-type HttpClient struct {
+type client struct {
 	client adminapi.Client
 }
 
-func NewClient(url string) *HttpClient {
-	return &HttpClient{
+func NewClient(url string) Client {
+	return &client{
 		client: adminapi.NewClient(url),
 	}
 }
 
-func (c *HttpClient) LoadVMs() error {
+func (c *client) LoadVMs() error {
 	_, _, err := c.client.LoadVMs(context.Background())
 
 	return err
 }
 
-func (c *HttpClient) WhitelistSubnet(subnetID string) error {
+func (c *client) WhitelistSubnet(subnetID string) error {
 	id, err := ids.FromString(subnetID)
 	if err != nil {
 		return err

@@ -8,27 +8,26 @@ import "github.com/ava-labs/avalanchego/database"
 var _ database.Iterator = &MockDatabaseIterator{}
 
 type MockDatabaseIterator struct {
-	Next_        bool
-	Err_         error
-	Key_, Value_ []byte
+	NextV        bool
+	ErrV         error
+	KeyV, ValueV []byte
 }
 
 func (m MockDatabaseIterator) Next() bool {
-	return m.Next_
+	return m.NextV
 }
 
 func (m MockDatabaseIterator) Error() error {
-	return m.Err_
+	return m.ErrV
 }
 
 func (m MockDatabaseIterator) Key() []byte {
-	return m.Key_
+	return m.KeyV
 }
 
 func (m MockDatabaseIterator) Value() []byte {
-	return m.Value_
+	return m.ValueV
 }
 
 func (m MockDatabaseIterator) Release() {
-	return
 }

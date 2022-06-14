@@ -81,7 +81,6 @@ func TestUpdateExecute(t *testing.T) {
 		{
 			name: "bad source info",
 			setup: func(mocks mocks) {
-
 				// iterator with only one key/value pair
 				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
 					itr := mockdb.NewMockIterator(mocks.ctrl)
@@ -102,7 +101,6 @@ func TestUpdateExecute(t *testing.T) {
 		{
 			name: "cant get latest git head",
 			setup: func(mocks mocks) {
-
 				// iterator with only one key/value pair
 				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
 					itr := mockdb.NewMockIterator(mocks.ctrl)
@@ -125,7 +123,6 @@ func TestUpdateExecute(t *testing.T) {
 		{
 			name: "workflow fails",
 			setup: func(mocks mocks) {
-
 				// iterator with only one key/value pair
 				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
 					itr := mockdb.NewMockIterator(mocks.ctrl)

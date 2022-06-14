@@ -87,7 +87,6 @@ type UpdateRepository struct {
 
 	installedVMs storage.Storage[version.Semantic]
 	sourcesList  storage.Storage[storage.SourceInfo]
-	db           database.Database
 
 	tmpPath    string
 	pluginPath string
@@ -196,11 +195,10 @@ func loadFromYAML[T types.Definition](
 			Commit:     commit,
 		}
 
-		alias := data[key].Alias()
+		alias := data[key].GetAlias()
 		aliasBytes := []byte(alias)
 
-		repoList := storage.RepoList{}
-		repoList, err = registry.Get(aliasBytes)
+		repoList, err := registry.Get(aliasBytes)
 		if err == database.ErrNotFound {
 			repoList = storage.RepoList{ // TODO check if this can be removed
 				Repositories: []string{},
@@ -236,7 +234,7 @@ func deleteStaleDefinitions[T types.Definition](db storage.Storage[storage.Defin
 		}
 
 		if definition.Commit != latestCommit {
-			fmt.Printf("Deleting a stale plugin: %s@%s as of %s.\n", definition.Definition.Alias(), definition.Commit, latestCommit)
+			fmt.Printf("Deleting a stale plugin: %s@%s as of %s.\n", definition.Definition.GetAlias(), definition.Commit, latestCommit)
 			if err := db.Delete(itr.Key()); err != nil {
 				return err
 			}

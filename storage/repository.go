@@ -7,9 +7,7 @@ import (
 	"github.com/ava-labs/apm/types"
 )
 
-var (
-	repositoryPrefix = []byte("repository")
-)
+var repositoryPrefix = []byte("repository")
 
 // Repository wraps a plugin repository's VMs and Subnets
 type Repository struct {

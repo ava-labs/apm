@@ -25,7 +25,7 @@ func TestTmpInstaller_Download(t *testing.T) {
 		url  string
 		path string
 	}
-	var tests = []struct {
+	tests := []struct {
 		name    string
 		setup   func(mocks)
 		args    args
@@ -71,7 +71,7 @@ func TestTmpInstaller_Download(t *testing.T) {
 
 			installer := NewVMInstaller(VMInstallerConfig{
 				Fs:        fs,
-				UrlClient: client,
+				URLClient: client,
 			})
 
 			tt.wantErr(t1, installer.Download(tt.args.url, tt.args.path), fmt.Sprintf("Download(%v, %v)", tt.args.url, tt.args.path))

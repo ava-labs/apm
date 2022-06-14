@@ -24,13 +24,13 @@ var _ Installer = &VMInstaller{}
 
 type VMInstallerConfig struct {
 	Fs        afero.Fs
-	UrlClient url.Client
+	URLClient url.Client
 }
 
 func NewVMInstaller(config VMInstallerConfig) *VMInstaller {
 	return &VMInstaller{
 		fs:     config.Fs,
-		Client: config.UrlClient,
+		Client: config.URLClient,
 	}
 }
 

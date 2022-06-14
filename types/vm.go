@@ -8,11 +8,11 @@ import "github.com/ava-labs/avalanchego/version"
 var _ Definition = &VM{}
 
 type VM struct {
-	ID_           string           `yaml:"id"`
-	Alias_        string           `yaml:"alias"`
-	Homepage_     string           `yaml:"homepage"`
-	Description_  string           `yaml:"description"`
-	Maintainers_  []string         `yaml:"maintainers"`
+	ID            string           `yaml:"id"`
+	Alias         string           `yaml:"alias"`
+	Homepage      string           `yaml:"homepage"`
+	Description   string           `yaml:"description"`
+	Maintainers   []string         `yaml:"maintainers"`
 	InstallScript string           `yaml:"installScript"`
 	BinaryPath    string           `yaml:"binaryPath"`
 	URL           string           `yaml:"url"`
@@ -20,22 +20,22 @@ type VM struct {
 	Version       version.Semantic `yaml:"version"`
 }
 
-func (vm VM) ID() string {
-	return vm.ID_
+func (vm VM) GetID() string {
+	return vm.ID
 }
 
-func (vm VM) Alias() string {
-	return vm.Alias_
+func (vm VM) GetAlias() string {
+	return vm.Alias
 }
 
-func (vm VM) Homepage() string {
-	return vm.Homepage_
+func (vm VM) GetHomepage() string {
+	return vm.Homepage
 }
 
-func (vm VM) Description() string {
-	return vm.Description_
+func (vm VM) GetDescription() string {
+	return vm.Description
 }
 
-func (vm VM) Maintainers() []string {
-	return vm.Maintainers_
+func (vm VM) GetMaintainers() []string {
+	return vm.Maintainers
 }

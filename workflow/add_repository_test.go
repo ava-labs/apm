@@ -87,6 +87,7 @@ func TestAddRepositoryExecute(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
+			// nolint
 			var sourcesList *storage.MockStorage[storage.SourceInfo]
 
 			sourcesList = storage.NewMockStorage[storage.SourceInfo](ctrl)
@@ -99,7 +100,7 @@ func TestAddRepositoryExecute(t *testing.T) {
 				AddRepositoryConfig{
 					SourcesList: sourcesList,
 					Alias:       "alias",
-					Url:         "url",
+					URL:         "url",
 				},
 			)
 

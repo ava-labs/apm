@@ -30,7 +30,7 @@ func TestIterator_Next(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mockIterator := mocks.MockDatabaseIterator{}
-			mockIterator.Next_ = test.next
+			mockIterator.NextV = test.next
 
 			itr := Iterator[any]{
 				itr: mockIterator,
@@ -58,7 +58,7 @@ func TestIterator_Error(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mockIterator := mocks.MockDatabaseIterator{}
-			mockIterator.Err_ = test.err
+			mockIterator.ErrV = test.err
 
 			itr := Iterator[any]{
 				itr: mockIterator,
@@ -86,7 +86,7 @@ func TestIterator_Key(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mockIterator := mocks.MockDatabaseIterator{}
-			mockIterator.Key_ = test.key
+			mockIterator.KeyV = test.key
 
 			itr := Iterator[any]{
 				itr: mockIterator,
@@ -135,7 +135,7 @@ func TestIterator_Value(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			mockIterator := mocks.MockDatabaseIterator{}
-			mockIterator.Value_ = test.bytes
+			mockIterator.ValueV = test.bytes
 
 			itr := Iterator[Foo]{
 				itr: mockIterator,
