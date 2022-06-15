@@ -3,18 +3,18 @@
 
 package types
 
-import "github.com/ava-labs/avalanchego/subnets"
-
+// import "github.com/ava-labs/avalanchego/subnets"
+//
 var _ Definition = &Subnet{}
 
 type Subnet struct {
-	ID          string               `yaml:"id"`
-	Alias       string               `yaml:"alias"`
-	Homepage    string               `yaml:"homepage"`
-	Description string               `yaml:"description"`
-	Maintainers []string             `yaml:"maintainers"`
-	VMs         []string             `yaml:"vms"`
-	Config      subnets.SubnetConfig `yaml:"config,omitempty"`
+	ID          string   `yaml:"id"`
+	Alias       string   `yaml:"alias"`
+	Homepage    string   `yaml:"homepage"`
+	Description string   `yaml:"description"`
+	Maintainers []string `yaml:"maintainers"`
+	VMs         []string `yaml:"vms"`
+	// Config      subnets.SubnetConfig `yaml:"config,omitempty"`
 }
 
 func (s Subnet) GetID() string {

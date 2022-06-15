@@ -12,6 +12,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/spf13/afero"
 
+	"github.com/ava-labs/apm/checksum"
 	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
 )
@@ -44,6 +45,7 @@ func NewInstall(config InstallConfig) *Install {
 		vmStorage:    config.VMStorage,
 		fs:           config.Fs,
 		installer:    config.Installer,
+		checksummer:  checksum.NewSHA256(config.Fs),
 	}
 }
 
@@ -59,6 +61,7 @@ type Install struct {
 	vmStorage    storage.Storage[storage.Definition[types.VM]]
 	fs           afero.Fs
 	installer    Installer
+	checksummer  checksum.Checksummer
 }
 
 func (i Install) Execute() error {
@@ -83,6 +86,14 @@ func (i Install) Execute() error {
 		// TODO sometimes these aren't cleaned up if we fail before cleanup step
 		return err
 	}
+
+	fmt.Printf("Calculating checksums...\n")
+	hash := fmt.Sprintf("%x", i.checksummer.Checksum(archiveFilePath))
+	if hash != vm.SHA256 {
+		return fmt.Errorf("checksums did not match. Expected %s but saw %s", vm.SHA256, hash)
+	}
+
+	fmt.Printf("Saw expected checksum value of %s\n", hash)
 
 	// Create the directory we'll store the plugin sources in if it doesn't exist.
 	if _, err := i.fs.Stat(workingDir); errors.Is(err, fs.ErrNotExist) {

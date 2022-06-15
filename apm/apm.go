@@ -17,6 +17,7 @@ import (
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/afero"
 
 	"github.com/ava-labs/apm/admin"
@@ -33,6 +34,7 @@ var (
 	dbDir         = "db"
 	repositoryDir = "repositories"
 	tmpDir        = "tmp"
+	namespace     = "apm_db"
 )
 
 type Config struct {
@@ -66,7 +68,8 @@ type APM struct {
 
 func New(config Config) (*APM, error) {
 	dbDir := filepath.Join(config.Directory, dbDir)
-	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{})
+	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{}, "apm_db", prometheus.NewRegistry())
+
 	if err != nil {
 		return nil, err
 	}

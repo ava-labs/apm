@@ -8,10 +8,10 @@
 package mocks
 
 import (
-	"reflect"
+	reflect "reflect"
 
 	"github.com/ava-labs/avalanchego/database"
-	"github.com/golang/mock/gomock"
+	gomock "github.com/golang/mock/gomock"
 )
 
 // MockKeyValueReader is a mock of KeyValueReader interface.
@@ -340,44 +340,6 @@ func (mr *MockKeyValueReaderWriterDeleterMockRecorder) Put(key, value interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockKeyValueReaderWriterDeleter)(nil).Put), key, value)
 }
 
-// MockStater is a mock of Stater interface.
-type MockStater struct {
-	ctrl     *gomock.Controller
-	recorder *MockStaterMockRecorder
-}
-
-// MockStaterMockRecorder is the mock recorder for MockStater.
-type MockStaterMockRecorder struct {
-	mock *MockStater
-}
-
-// NewMockStater creates a new mock instance.
-func NewMockStater(ctrl *gomock.Controller) *MockStater {
-	mock := &MockStater{ctrl: ctrl}
-	mock.recorder = &MockStaterMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockStater) EXPECT() *MockStaterMockRecorder {
-	return m.recorder
-}
-
-// Stat mocks base method.
-func (m *MockStater) Stat(property string) (string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Stat", property)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Stat indicates an expected call of Stat.
-func (mr *MockStaterMockRecorder) Stat(property interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockStater)(nil).Stat), property)
-}
-
 // MockCompacter is a mock of Compacter interface.
 type MockCompacter struct {
 	ctrl     *gomock.Controller
@@ -510,6 +472,21 @@ func (mr *MockDatabaseMockRecorder) Has(key interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Has", reflect.TypeOf((*MockDatabase)(nil).Has), key)
 }
 
+// HealthCheck mocks base method.
+func (m *MockDatabase) HealthCheck() (interface{}, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HealthCheck")
+	ret0, _ := ret[0].(interface{})
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HealthCheck indicates an expected call of HealthCheck.
+func (mr *MockDatabaseMockRecorder) HealthCheck() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HealthCheck", reflect.TypeOf((*MockDatabase)(nil).HealthCheck))
+}
+
 // NewBatch mocks base method.
 func (m *MockDatabase) NewBatch() database.Batch {
 	m.ctrl.T.Helper()
@@ -592,19 +569,4 @@ func (m *MockDatabase) Put(key, value []byte) error {
 func (mr *MockDatabaseMockRecorder) Put(key, value interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Put", reflect.TypeOf((*MockDatabase)(nil).Put), key, value)
-}
-
-// Stat mocks base method.
-func (m *MockDatabase) Stat(property string) (string, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Stat", property)
-	ret0, _ := ret[0].(string)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Stat indicates an expected call of Stat.
-func (mr *MockDatabaseMockRecorder) Stat(property interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockDatabase)(nil).Stat), property)
 }
