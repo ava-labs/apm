@@ -7,7 +7,6 @@ import (
 	"context"
 
 	adminapi "github.com/ava-labs/avalanchego/api/admin"
-	"github.com/ava-labs/avalanchego/ids"
 )
 
 var _ Client = &client{}
@@ -34,11 +33,12 @@ func (c *client) LoadVMs() error {
 }
 
 func (c *client) WhitelistSubnet(subnetID string) error {
-	id, err := ids.FromString(subnetID)
-	if err != nil {
-		return err
-	}
-
-	_, err = c.client.WhitelistSubnet(context.Background(), id)
-	return err
+	// id, err := ids.FromString(subnetID)
+	// if err != nil {
+	// 	return err
+	// }
+	//
+	// _, err = c.client.WhitelistSubnet(context.Background(), id)
+	// return err
+	return nil
 }
