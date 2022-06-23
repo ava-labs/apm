@@ -323,7 +323,7 @@ func (u *UpdateRepository) updateVMs() error {
 	}
 
 	if !updated {
-		fmt.Printf("No changes detected.")
+		fmt.Printf("No changes detected.\n")
 		return nil
 	}
 
