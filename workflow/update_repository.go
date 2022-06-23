@@ -6,6 +6,7 @@ package workflow
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -206,7 +207,17 @@ func loadFromYAML[T types.Definition](
 			return err
 		}
 
-		repoList.Repositories = append(repoList.Repositories, string(repositoryAlias))
+		repositoryAliasStr := string(repositoryAlias)
+		idx := sort.SearchStrings(repoList.Repositories, repositoryAliasStr)
+
+		if idx == len(repoList.Repositories) {
+			repoList.Repositories = append(repoList.Repositories, repositoryAliasStr)
+		} else {
+			if repoList.Repositories[idx] != repositoryAliasStr {
+				repoList.Repositories = append(repoList.Repositories[:idx+1], repoList.Repositories[idx:]...)
+				repoList.Repositories[idx] = repositoryAliasStr
+			}
+		}
 
 		if err := registry.Put(aliasBytes, repoList); err != nil {
 			return err
