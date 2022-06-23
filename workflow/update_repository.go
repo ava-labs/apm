@@ -269,7 +269,7 @@ func (u *UpdateRepository) updateVMs() error {
 
 		updatedVM := definition.Definition
 
-		if installInfo.Version.Compare(updatedVM.Version) < 0 {
+		if installInfo.Version.Compare(&updatedVM.Version) < 0 {
 			fmt.Printf(
 				"Detected an update for %s from v%v.%v.%v to v%v.%v.%v.\n",
 				fullVMName,

@@ -34,7 +34,11 @@ func TestInstallExecute(t *testing.T) {
 			BinaryPath:    "./path/to/binary",
 			URL:           "www.website.com",
 			SHA256:        "666f6f626172",
-			Version:       version.NewDefaultSemantic(1, 2, 3),
+			Version: version.Semantic{
+				Major: 1,
+				Minor: 2,
+				Patch: 3,
+			},
 		},
 		Commit: plumbing.ZeroHash,
 	}
@@ -55,7 +59,11 @@ func TestInstallExecute(t *testing.T) {
 			BinaryPath:    "./path/to/binary",
 			URL:           "www.website.com",
 			SHA256:        "666f6f626172",
-			Version:       version.NewDefaultSemantic(5, 6, 7),
+			Version: version.Semantic{
+				Major: 5,
+				Minor: 6,
+				Patch: 7,
+			},
 		},
 		Commit: plumbing.ZeroHash,
 	}
