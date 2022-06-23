@@ -263,6 +263,10 @@ func (u *UpdateRepository) updateVMs() error {
 
 		vmStorage := u.repository.VMs
 		definition, err = vmStorage.Get([]byte(vmName))
+		if err == database.ErrNotFound {
+			fmt.Printf("Warning - found a vm while updating %s which is no longer registered in a repository. You should uninstall this VM to avoid noisy logs. Skipping...\n", fullVMName)
+			continue
+		}
 		if err != nil {
 			return err
 		}
