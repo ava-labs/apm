@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/ava-labs/avalanche-plugins-core v0.0.0-00010101000000-000000000000
-	github.com/ava-labs/avalanchego v1.7.11
+	github.com/ava-labs/avalanchego v1.7.14
 	github.com/cavaliergopher/grab/v3 v3.0.1
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/golang/mock v1.6.0
@@ -76,10 +76,10 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
-	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e // indirect
+	golang.org/x/crypto v0.0.0-20220622213112-05595931fe9d // indirect
 	golang.org/x/net v0.0.0-20220531185740-c18622019355 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
-	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
+	golang.org/x/sys v0.0.0-20220627191245-f75cf1eec38b // indirect
 	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac // indirect
@@ -97,5 +97,3 @@ require (
 replace github.com/ava-labs/avalanche-plugin => /Users/joshua.kim/github/avalanche-plugin
 
 replace github.com/ava-labs/avalanche-plugins-core => /Users/joshua.kim/github/avalanche-plugins-core
-
-replace github.com/ava-labs/avalanchego => /Users/joshua.kim/github/avalanchego-internal

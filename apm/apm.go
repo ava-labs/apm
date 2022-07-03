@@ -31,10 +31,10 @@ import (
 )
 
 var (
-	dbDir         = "db"
-	repositoryDir = "repositories"
-	tmpDir        = "tmp"
-	namespace     = "apm_db"
+	dbDir            = "db"
+	repositoryDir    = "repositories"
+	tmpDir           = "tmp"
+	metricsNamespace = "apm_db"
 )
 
 type Config struct {
@@ -68,7 +68,7 @@ type APM struct {
 
 func New(config Config) (*APM, error) {
 	dbDir := filepath.Join(config.Directory, dbDir)
-	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{}, "apm_db", prometheus.NewRegistry())
+	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{}, metricsNamespace, prometheus.NewRegistry())
 
 	if err != nil {
 		return nil, err

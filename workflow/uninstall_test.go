@@ -34,7 +34,7 @@ func TestUninstallExecute(t *testing.T) {
 			BinaryPath:    "./build/binaryPath",
 			URL:           "url",
 			SHA256:        "sha256",
-			Version:       version.NewDefaultSemantic(1, 2, 3),
+			Version:       version.Semantic{Major: 1, Minor: 2, Patch: 3},
 		},
 		Commit: plumbing.NewHash("foobar commit"),
 	}
