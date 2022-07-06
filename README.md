@@ -90,5 +90,5 @@ password: <personal access token here>
 
 Example command to download a subnet's VMs from a private repository:
 ```
-apm join-subnet --subnet-alias=foobar --credentials-file=/home/joshua-kim/token --plugin-path=/home/joshua-kim/dev/avalanchego/build/plugins
+apm join-subnet --subnet-alias=foobar --credentials-file=/home/joshua-kim/token
 ```
