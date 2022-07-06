@@ -10,7 +10,6 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/ava-labs/avalanche-plugins-core/core"
 	"github.com/ava-labs/avalanchego/database"
 	"github.com/ava-labs/avalanchego/database/leveldb"
 	"github.com/ava-labs/avalanchego/utils/logging"
@@ -21,6 +20,7 @@ import (
 	"github.com/spf13/afero"
 
 	"github.com/ava-labs/apm/admin"
+	"github.com/ava-labs/apm/constant"
 	"github.com/ava-labs/apm/engine"
 	"github.com/ava-labs/apm/git"
 	"github.com/ava-labs/apm/storage"
@@ -99,11 +99,11 @@ func New(config Config) (*APM, error) {
 	}
 
 	// TODO simplify this
-	coreKey := []byte(core.Alias)
+	coreKey := []byte(constant.CoreAlias)
 	if ok, err := a.sourcesList.Has(coreKey); err != nil {
 		return nil, err
 	} else if !ok {
-		err := a.AddRepository(core.Alias, core.URL)
+		err := a.AddRepository(constant.CoreAlias, constant.CoreURL)
 		if err != nil {
 			return nil, err
 		}
@@ -318,8 +318,8 @@ func (a *APM) RemoveRepository(alias string) error {
 }
 
 func (a *APM) removeRepository(name string) error {
-	if name == core.Alias {
-		fmt.Printf("Can't remove %s (required repository).\n", core.Alias)
+	if name == constant.CoreAlias {
+		fmt.Printf("Can't remove %s (required repository).\n", constant.CoreAlias)
 		return nil
 	}
 

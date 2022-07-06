@@ -3,7 +3,6 @@ module github.com/ava-labs/apm
 go 1.18
 
 require (
-	github.com/ava-labs/avalanche-plugins-core v0.0.0-00010101000000-000000000000
 	github.com/ava-labs/avalanchego v1.7.14
 	github.com/cavaliergopher/grab/v3 v3.0.1
 	github.com/go-git/go-git/v5 v5.4.2
