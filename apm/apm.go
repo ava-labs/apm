@@ -69,7 +69,6 @@ type APM struct {
 func New(config Config) (*APM, error) {
 	dbDir := filepath.Join(config.Directory, dbDir)
 	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{}, metricsNamespace, prometheus.NewRegistry())
-
 	if err != nil {
 		return nil, err
 	}

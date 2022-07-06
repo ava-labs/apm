@@ -212,11 +212,9 @@ func loadFromYAML[T types.Definition](
 
 		if idx == len(repoList.Repositories) {
 			repoList.Repositories = append(repoList.Repositories, repositoryAliasStr)
-		} else {
-			if repoList.Repositories[idx] != repositoryAliasStr {
-				repoList.Repositories = append(repoList.Repositories[:idx+1], repoList.Repositories[idx:]...)
-				repoList.Repositories[idx] = repositoryAliasStr
-			}
+		} else if repoList.Repositories[idx] != repositoryAliasStr {
+			repoList.Repositories = append(repoList.Repositories[:idx+1], repoList.Repositories[idx:]...)
+			repoList.Repositories[idx] = repositoryAliasStr
 		}
 
 		if err := registry.Put(aliasBytes, repoList); err != nil {
