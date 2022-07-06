@@ -20,7 +20,7 @@ import (
 var (
 	_ Workflow = &Update{}
 
-	mainBranch = plumbing.NewBranchReferenceName("main")
+	master = plumbing.NewBranchReferenceName("master")
 )
 
 type UpdateConfig struct {
@@ -87,7 +87,7 @@ func (u Update) Execute() error {
 		}
 		previousCommit := sourceInfo.Commit
 		repositoryPath := filepath.Join(u.repositoriesPath, organization, repo)
-		latestCommit, err := u.gitFactory.GetRepository(sourceInfo.URL, repositoryPath, mainBranch, &u.auth)
+		latestCommit, err := u.gitFactory.GetRepository(sourceInfo.URL, repositoryPath, master, &u.auth)
 		if err != nil {
 			return err
 		}
