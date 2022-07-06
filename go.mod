@@ -92,8 +92,3 @@ require (
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
-
-// TODO remove
-replace github.com/ava-labs/avalanche-plugin => /Users/joshua.kim/github/avalanche-plugin
-
-replace github.com/ava-labs/avalanche-plugins-core => /Users/joshua.kim/github/avalanche-plugins-core
