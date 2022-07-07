@@ -18,6 +18,7 @@ func addRepository(fs afero.Fs) *cobra.Command {
 	command.PersistentFlags().StringVar(&alias, "alias", "", "alias for the repository")
 	err := command.MarkPersistentFlagRequired("alias")
 	if err != nil {
+		// TODO cleanup these panics
 		panic(err)
 	}
 
