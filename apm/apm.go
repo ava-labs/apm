@@ -4,10 +4,12 @@
 package apm
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 
 	"github.com/ava-labs/avalanchego/database"
@@ -53,7 +55,7 @@ type APM struct {
 	registry     storage.Storage[storage.RepoList]
 	repoFactory  storage.RepositoryFactory
 
-	engine workflow.Executor
+	executor workflow.Executor
 
 	auth http.BasicAuth
 
@@ -63,6 +65,7 @@ type APM struct {
 	repositoriesPath string
 	tmpPath          string
 	pluginPath       string
+	adminAPIEndpoint string
 	fs               afero.Fs
 }
 
@@ -82,6 +85,7 @@ func New(config Config) (*APM, error) {
 		sourcesList:      storage.NewSourceInfo(db),
 		installedVMs:     storage.NewInstalledVMs(db),
 		auth:             config.Auth,
+		adminAPIEndpoint: config.AdminAPIEndpoint,
 		adminClient:      admin.NewClient(fmt.Sprintf("http://%s", config.AdminAPIEndpoint)),
 		installer: workflow.NewVMInstaller(
 			workflow.VMInstallerConfig{
@@ -89,7 +93,7 @@ func New(config Config) (*APM, error) {
 				URLClient: url.NewClient(),
 			},
 		),
-		engine:      engine.NewWorkflowEngine(),
+		executor:    engine.NewWorkflowEngine(),
 		fs:          config.Fs,
 		repoFactory: storage.NewRepositoryFactory(db),
 	}
@@ -173,7 +177,7 @@ func (a *APM) install(name string) error {
 		Installer:    a.installer,
 	})
 
-	return a.engine.Execute(workflow)
+	return a.executor.Execute(workflow)
 }
 
 func (a *APM) Uninstall(alias string) error {
@@ -229,24 +233,20 @@ func (a *APM) joinSubnet(fullName string) error {
 	}
 
 	fmt.Printf("Updating virtual machines...\n")
-	if err := a.adminClient.LoadVMs(); err != nil {
+	if err := a.adminClient.LoadVMs(); errors.Is(err, syscall.ECONNREFUSED) {
+		fmt.Printf("Node at %s was offline. Virtual machines will be available upon node startup.\n", a.adminAPIEndpoint)
+	} else if err != nil {
 		return err
 	}
 
 	fmt.Printf("Whitelisting subnet %s...\n", subnet.GetID())
-	if err := a.adminClient.WhitelistSubnet(subnet.GetID()); err != nil {
+	if err := a.adminClient.WhitelistSubnet(subnet.GetID()); errors.Is(err, syscall.ECONNREFUSED) {
+		fmt.Printf("Node at %s was offline. You'll need to whitelist the subnet upon node restart.\n", a.adminAPIEndpoint)
+	} else if err != nil {
 		return err
 	}
 
 	fmt.Printf("Finished installing virtual machines for subnet %s.\n", subnet.ID)
-	return nil
-}
-
-func (a *APM) Upgrade(alias string) error {
-	return nil
-}
-
-func (a *APM) Search(alias string) error {
 	return nil
 }
 
@@ -269,7 +269,7 @@ func (a *APM) info(fullName string) error {
 
 func (a *APM) Update() error {
 	workflow := workflow.NewUpdate(workflow.UpdateConfig{
-		Executor:         a.engine,
+		Executor:         a.executor,
 		Registry:         a.registry,
 		InstalledVMs:     a.installedVMs,
 		SourcesList:      a.sourcesList,
@@ -284,11 +284,48 @@ func (a *APM) Update() error {
 		Fs:               a.fs,
 	})
 
-	if err := a.engine.Execute(workflow); err != nil {
+	if err := a.executor.Execute(workflow); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (a *APM) Upgrade(alias string) error {
+	// If we have an alias specified, upgrade the specified VM.
+	if alias != "" {
+		return parseAndRun(alias, a.registry, a.upgradeVM)
+	}
+
+	// Otherwise, just upgrade everything.
+	wf := workflow.NewUpgrade(workflow.UpgradeConfig{
+		Executor:     a.executor,
+		RepoFactory:  a.repoFactory,
+		Registry:     a.registry,
+		SourcesList:  a.sourcesList,
+		InstalledVMs: a.installedVMs,
+		TmpPath:      a.tmpPath,
+		PluginPath:   a.pluginPath,
+		Installer:    a.installer,
+		Fs:           a.fs,
+	})
+
+	return a.executor.Execute(wf)
+}
+
+func (a *APM) upgradeVM(name string) error {
+	return a.executor.Execute(workflow.NewUpgradeVM(
+		workflow.UpgradeVMConfig{
+			Executor:     a.executor,
+			FullVMName:   name,
+			RepoFactory:  a.repoFactory,
+			InstalledVMs: a.installedVMs,
+			TmpPath:      a.tmpPath,
+			PluginPath:   a.pluginPath,
+			Installer:    a.installer,
+			Fs:           a.fs,
+		},
+	))
 }
 
 func (a *APM) AddRepository(alias string, url string) error {
@@ -300,7 +337,7 @@ func (a *APM) AddRepository(alias string, url string) error {
 		},
 	)
 
-	return a.engine.Execute(wf)
+	return a.executor.Execute(wf)
 }
 
 func (a *APM) RemoveRepository(alias string) error {
@@ -322,7 +359,6 @@ func (a *APM) removeRepository(name string) error {
 		return nil
 	}
 
-	// TODO don't let people remove core
 	aliasBytes := []byte(name)
 	repoRegistry := a.repoFactory.GetRepository(aliasBytes)
 

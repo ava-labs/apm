@@ -11,7 +11,7 @@ import (
 func listRepositories(fs afero.Fs) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "list-repositories",
-		Short: "list registered source repositories for avalanche plugins",
+		Short: "Lists all tracked plugin repositories.",
 	}
 	command.RunE = func(_ *cobra.Command, _ []string) error {
 		apm, err := initAPM(fs)

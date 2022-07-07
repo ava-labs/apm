@@ -136,7 +136,6 @@ func TestUpdateExecute(t *testing.T) {
 				})
 
 				wf := NewUpdateRepository(UpdateRepositoryConfig{
-					Executor:       mocks.executor,
 					RepoName:       repo,
 					RepositoryPath: repoInstallPath,
 					AliasBytes:     []byte(alias),
@@ -146,10 +145,6 @@ func TestUpdateExecute(t *testing.T) {
 					Registry:       mocks.registry,
 					SourceInfo:     sourceInfo,
 					SourcesList:    mocks.sourcesList,
-					InstalledVMs:   mocks.installedVMs,
-					TmpPath:        tmpPath,
-					PluginPath:     pluginPath,
-					Installer:      mocks.installer,
 					Fs:             fs,
 				})
 
@@ -162,7 +157,7 @@ func TestUpdateExecute(t *testing.T) {
 			},
 		},
 		{
-			name: "success single repository no update needed",
+			name: "success single repository no upgrade needed",
 			setup: func(mocks mocks) {
 				// iterator with only one key/value pair
 				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
@@ -202,7 +197,6 @@ func TestUpdateExecute(t *testing.T) {
 				})
 
 				wf := NewUpdateRepository(UpdateRepositoryConfig{
-					Executor:       mocks.executor,
 					RepoName:       repo,
 					RepositoryPath: repoInstallPath,
 					AliasBytes:     []byte(alias),
@@ -212,10 +206,6 @@ func TestUpdateExecute(t *testing.T) {
 					Registry:       mocks.registry,
 					SourceInfo:     sourceInfo,
 					SourcesList:    mocks.sourcesList,
-					InstalledVMs:   mocks.installedVMs,
-					TmpPath:        tmpPath,
-					PluginPath:     pluginPath,
-					Installer:      mocks.installer,
 					Fs:             fs,
 				})
 

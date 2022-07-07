@@ -8,27 +8,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func joinSubnet(fs afero.Fs) *cobra.Command {
-	subnet := ""
-
+func upgrade(fs afero.Fs) *cobra.Command {
+	// this flag is optional
+	vm := ""
 	command := &cobra.Command{
-		Use:   "join-subnet",
-		Short: "Installs all virtual machines for a subnet.",
+		Use: "upgrade",
+		Short: "Upgrades a virtual machine. If none is specified, all " +
+			"installed virtual machines are upgraded.",
 	}
-
-	command.PersistentFlags().StringVar(&subnet, "subnet", "", "subnet alias to join")
-	err := command.MarkPersistentFlagRequired("subnet")
-	if err != nil {
-		panic(err)
-	}
-
+	command.PersistentFlags().StringVar(&vm, "vm", "", "vm alias to install")
 	command.RunE = func(_ *cobra.Command, _ []string) error {
 		apm, err := initAPM(fs)
 		if err != nil {
 			return err
 		}
 
-		return apm.JoinSubnet(subnet)
+		return apm.Upgrade(vm)
 	}
 
 	return command

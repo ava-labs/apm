@@ -20,6 +20,7 @@ import (
 var (
 	_ Workflow = &Update{}
 
+	// TODO configurable branches
 	master = plumbing.NewBranchReferenceName("master")
 )
 
@@ -98,7 +99,6 @@ func (u Update) Execute() error {
 		}
 
 		workflow := NewUpdateRepository(UpdateRepositoryConfig{
-			Executor:       u.executor,
 			RepoName:       repo,
 			RepositoryPath: repositoryPath,
 			AliasBytes:     aliasBytes,
@@ -108,10 +108,6 @@ func (u Update) Execute() error {
 			Registry:       u.registry,
 			SourceInfo:     sourceInfo,
 			SourcesList:    u.sourcesList,
-			InstalledVMs:   u.installedVMs,
-			TmpPath:        u.tmpPath,
-			PluginPath:     u.pluginPath,
-			Installer:      u.installer,
 			Fs:             u.fs,
 		})
 
