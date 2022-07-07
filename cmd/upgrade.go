@@ -8,11 +8,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func uninstall(fs afero.Fs) *cobra.Command {
+func upgrade(fs afero.Fs) *cobra.Command {
 	vm := ""
 	command := &cobra.Command{
-		Use:   "uninstall-vm",
-		Short: "uninstalls a virtual machine by its alias",
+		Use: "upgrade",
+		Short: "Upgrades a virtual machine. If none is specified, all are " +
+			"upgraded.",
 	}
 	command.PersistentFlags().StringVar(&vm, "vm", "", "vm alias to install")
 	command.RunE = func(_ *cobra.Command, _ []string) error {
@@ -21,7 +22,7 @@ func uninstall(fs afero.Fs) *cobra.Command {
 			return err
 		}
 
-		return apm.Uninstall(vm)
+		return apm.Upgrade(vm)
 	}
 
 	return command

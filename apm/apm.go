@@ -53,7 +53,7 @@ type APM struct {
 	registry     storage.Storage[storage.RepoList]
 	repoFactory  storage.RepositoryFactory
 
-	engine workflow.Executor
+	executor workflow.Executor
 
 	auth http.BasicAuth
 
@@ -89,7 +89,7 @@ func New(config Config) (*APM, error) {
 				URLClient: url.NewClient(),
 			},
 		),
-		engine:      engine.NewWorkflowEngine(),
+		executor:    engine.NewWorkflowEngine(),
 		fs:          config.Fs,
 		repoFactory: storage.NewRepositoryFactory(db),
 	}
@@ -173,7 +173,7 @@ func (a *APM) install(name string) error {
 		Installer:    a.installer,
 	})
 
-	return a.engine.Execute(workflow)
+	return a.executor.Execute(workflow)
 }
 
 func (a *APM) Uninstall(alias string) error {
@@ -242,14 +242,6 @@ func (a *APM) joinSubnet(fullName string) error {
 	return nil
 }
 
-func (a *APM) Upgrade(alias string) error {
-	return nil
-}
-
-func (a *APM) Search(alias string) error {
-	return nil
-}
-
 func (a *APM) Info(alias string) error {
 	if qualifiedName(alias) {
 		return a.install(alias)
@@ -269,7 +261,7 @@ func (a *APM) info(fullName string) error {
 
 func (a *APM) Update() error {
 	workflow := workflow.NewUpdate(workflow.UpdateConfig{
-		Executor:         a.engine,
+		Executor:         a.executor,
 		Registry:         a.registry,
 		InstalledVMs:     a.installedVMs,
 		SourcesList:      a.sourcesList,
@@ -284,11 +276,46 @@ func (a *APM) Update() error {
 		Fs:               a.fs,
 	})
 
-	if err := a.engine.Execute(workflow); err != nil {
+	if err := a.executor.Execute(workflow); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (a *APM) Upgrade(alias string) error {
+	// If we have an alias specified, upgrade the specified VM.
+	if alias == "" {
+		return parseAndRun(alias, a.registry, a.upgradeVM)
+	}
+
+	// Otherwise, just upgrade everything.
+	wf := workflow.NewUpgrade(workflow.UpgradeConfig{
+		Executor:     a.executor,
+		Registry:     a.registry,
+		SourcesList:  a.sourcesList,
+		InstalledVMs: a.installedVMs,
+		TmpPath:      a.tmpPath,
+		PluginPath:   a.pluginPath,
+		Installer:    a.installer,
+		Fs:           a.fs,
+	})
+
+	return a.executor.Execute(wf)
+}
+
+func (a *APM) upgradeVM(name string) error {
+	return a.executor.Execute(workflow.NewUpgradeVM(
+		workflow.UpgradeVMConfig{
+			Executor:     a.executor,
+			FullVMName:   name,
+			InstalledVMs: a.installedVMs,
+			TmpPath:      a.tmpPath,
+			PluginPath:   a.pluginPath,
+			Installer:    a.installer,
+			Fs:           a.fs,
+		},
+	))
 }
 
 func (a *APM) AddRepository(alias string, url string) error {
@@ -300,7 +327,7 @@ func (a *APM) AddRepository(alias string, url string) error {
 		},
 	)
 
-	return a.engine.Execute(wf)
+	return a.executor.Execute(wf)
 }
 
 func (a *APM) RemoveRepository(alias string) error {
@@ -322,7 +349,6 @@ func (a *APM) removeRepository(name string) error {
 		return nil
 	}
 
-	// TODO don't let people remove core
 	aliasBytes := []byte(name)
 	repoRegistry := a.repoFactory.GetRepository(aliasBytes)
 

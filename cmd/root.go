@@ -68,8 +68,10 @@ func New(fs afero.Fs) (*cobra.Command, error) {
 		install(fs),
 		uninstall(fs),
 		update(fs),
+		upgrade(fs),
 		listRepositories(fs),
 		joinSubnet(fs),
+		addRepository(fs),
 	)
 
 	return rootCmd, nil

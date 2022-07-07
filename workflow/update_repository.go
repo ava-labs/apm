@@ -15,7 +15,6 @@ import (
 
 	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/types"
-	"github.com/ava-labs/apm/util"
 )
 
 var (
@@ -29,7 +28,6 @@ var (
 )
 
 type UpdateRepositoryConfig struct {
-	Executor       Executor
 	RepoName       string
 	RepositoryPath string
 
@@ -38,21 +36,16 @@ type UpdateRepositoryConfig struct {
 	PreviousCommit plumbing.Hash
 	LatestCommit   plumbing.Hash
 
-	SourceInfo   storage.SourceInfo
-	Repository   storage.Repository
-	Registry     storage.Storage[storage.RepoList]
-	SourcesList  storage.Storage[storage.SourceInfo]
-	InstalledVMs storage.Storage[storage.InstallInfo]
+	SourceInfo  storage.SourceInfo
+	Repository  storage.Repository
+	Registry    storage.Storage[storage.RepoList]
+	SourcesList storage.Storage[storage.SourceInfo]
 
-	TmpPath    string
-	PluginPath string
-	Installer  Installer
-	Fs         afero.Fs
+	Fs afero.Fs
 }
 
 func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
 	return &UpdateRepository{
-		executor:           config.Executor,
 		repoName:           config.RepoName,
 		repositoryPath:     config.RepositoryPath,
 		aliasBytes:         config.AliasBytes,
@@ -60,18 +53,13 @@ func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
 		latestCommit:       config.LatestCommit,
 		repository:         config.Repository,
 		registry:           config.Registry,
-		repositoryMetadata: config.SourceInfo,
-		installedVMs:       config.InstalledVMs,
 		sourcesList:        config.SourcesList,
-		tmpPath:            config.TmpPath,
-		pluginPath:         config.PluginPath,
-		installer:          config.Installer,
+		repositoryMetadata: config.SourceInfo,
 		fs:                 config.Fs,
 	}
 }
 
 type UpdateRepository struct {
-	executor       Executor
 	repoName       string
 	repositoryPath string
 
@@ -80,39 +68,28 @@ type UpdateRepository struct {
 	previousCommit plumbing.Hash
 	latestCommit   plumbing.Hash
 
-	repository storage.Repository
-	registry   storage.Storage[storage.RepoList]
+	repository  storage.Repository
+	registry    storage.Storage[storage.RepoList]
+	sourcesList storage.Storage[storage.SourceInfo]
 
 	repositoryMetadata storage.SourceInfo
 
-	installedVMs storage.Storage[storage.InstallInfo]
-	sourcesList  storage.Storage[storage.SourceInfo]
-
-	tmpPath    string
-	pluginPath string
-
-	installer Installer
-	fs        afero.Fs
+	fs afero.Fs
 }
 
 func (u *UpdateRepository) Execute() error {
-	if err := u.updateDefinitions(); err != nil {
+	if err := u.update(); err != nil {
 		fmt.Printf("Unexpected error while updating definitions. %s", err)
 		return err
 	}
 
-	if err := u.updateVMs(); err != nil {
-		fmt.Printf("Unexpected error while updating vms. %s", err)
-		return err
-	}
-
 	// checkpoint progress
-	updatedMetadata := storage.SourceInfo{
+	updatedCheckpoint := storage.SourceInfo{
 		Alias:  u.repositoryMetadata.Alias,
 		URL:    u.repositoryMetadata.URL,
 		Commit: u.latestCommit,
 	}
-	if err := u.sourcesList.Put(u.aliasBytes, updatedMetadata); err != nil {
+	if err := u.sourcesList.Put(u.aliasBytes, updatedCheckpoint); err != nil {
 		return err
 	}
 
@@ -121,7 +98,7 @@ func (u *UpdateRepository) Execute() error {
 	return nil
 }
 
-func (u *UpdateRepository) updateDefinitions() error {
+func (u *UpdateRepository) update() error {
 	vmsPath := filepath.Join(u.repositoryPath, vmDir)
 
 	if err := loadFromYAML[types.VM](u.fs, vmKey, vmsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.VMs); err != nil {
@@ -247,82 +224,6 @@ func deleteStaleDefinitions[T types.Definition](db storage.Storage[storage.Defin
 				return err
 			}
 		}
-	}
-
-	return nil
-}
-
-func (u *UpdateRepository) updateVMs() error {
-	updated := false
-
-	itr := u.installedVMs.Iterator()
-	defer itr.Release()
-
-	for itr.Next() {
-		fullVMName := string(itr.Key())
-		installInfo, err := itr.Value()
-		if err != nil {
-			return err
-		}
-
-		repoAlias, vmName := util.ParseQualifiedName(fullVMName)
-		organization, repo := util.ParseAlias(repoAlias)
-
-		var definition storage.Definition[types.VM]
-
-		vmStorage := u.repository.VMs
-		definition, err = vmStorage.Get([]byte(vmName))
-		if err == database.ErrNotFound {
-			fmt.Printf("Warning - found a vm while updating %s which is no longer registered in a repository. You should uninstall this VM to avoid noisy logs. Skipping...\n", fullVMName)
-			continue
-		}
-		if err != nil {
-			return err
-		}
-
-		updatedVM := definition.Definition
-
-		if installInfo.Version.Compare(&updatedVM.Version) < 0 {
-			fmt.Printf(
-				"Detected an update for %s from v%v.%v.%v to v%v.%v.%v.\n",
-				fullVMName,
-				installInfo.Version.Major,
-				installInfo.Version.Minor,
-				installInfo.Version.Patch,
-				updatedVM.Version.Major,
-				updatedVM.Version.Minor,
-				updatedVM.Version.Patch,
-			)
-			installWorkflow := NewInstall(InstallConfig{
-				Name:         fullVMName,
-				Plugin:       vmName,
-				Organization: organization,
-				Repo:         repo,
-				TmpPath:      u.tmpPath,
-				PluginPath:   u.pluginPath,
-				InstalledVMs: u.installedVMs,
-				VMStorage:    u.repository.VMs,
-				Installer:    u.installer,
-			})
-
-			fmt.Printf(
-				"Rebuilding binaries for %s v%v.%v.%v.\n",
-				fullVMName,
-				updatedVM.Version.Major,
-				updatedVM.Version.Minor,
-				updatedVM.Version.Patch,
-			)
-			if err := u.executor.Execute(installWorkflow); err != nil {
-				return err
-			}
-
-			updated = true
-		}
-	}
-
-	if !updated {
-		fmt.Printf("No changes detected.\n")
-		return nil
 	}
 
 	return nil

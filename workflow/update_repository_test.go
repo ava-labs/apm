@@ -27,9 +27,6 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 		alias = "organization/repository"
 		url   = "url"
 
-		tmpPath    = "tmp"
-		pluginPath = "pluginDir"
-
 		spacesVM     = "spacesvm"
 		spacesSubnet = "spaces"
 	)
@@ -106,8 +103,6 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 		errs := wrappers.Errs{}
 
 		errs.Add(
-			fs.MkdirAll(tmpPath, perms.ReadWrite),
-			fs.MkdirAll(pluginPath, perms.ReadWrite),
 			fs.MkdirAll(subnetsPath, perms.ReadWrite),
 			fs.MkdirAll(vmsPath, perms.ReadWrite),
 		)
@@ -122,11 +117,10 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 
 		fs afero.Fs
 
-		registry     *storage.MockStorage[storage.RepoList]
-		sourcesList  *storage.MockStorage[storage.SourceInfo]
-		installedVMs *storage.MockStorage[storage.InstallInfo]
-		vms          *storage.MockStorage[storage.Definition[types.VM]]
-		subnets      *storage.MockStorage[storage.Definition[types.Subnet]]
+		registry    *storage.MockStorage[storage.RepoList]
+		sourcesList *storage.MockStorage[storage.SourceInfo]
+		vms         *storage.MockStorage[storage.Definition[types.VM]]
+		subnets     *storage.MockStorage[storage.Definition[types.Subnet]]
 
 		installer *MockInstaller
 
@@ -143,7 +137,7 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 				setupFs(mocks.fs)
 				assert.Nil(t, afero.WriteFile(mocks.fs, filepath.Join(vmsPath, "vm-1.yaml"), vm, perms.ReadWrite))
 
-				// update subnet definitions
+				// upgrade subnet definitions
 				mocks.registry.EXPECT().Get([]byte(spacesVM)).Return(storage.RepoList{Repositories: []string{}}, nil)
 				mocks.registry.EXPECT().Put([]byte(spacesVM), storage.RepoList{Repositories: []string{alias}}).Return(nil)
 				mocks.vms.EXPECT().Put([]byte(spacesVM), gomock.Any()).Return(nil) // TODO fix
@@ -162,13 +156,6 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 
 					return *storage.NewIterator[storage.Definition[types.Subnet]](itr)
 				})
-				mocks.installedVMs.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.InstallInfo] {
-					itr := mockdb.NewMockIterator(mocks.ctrl)
-					defer itr.EXPECT().Release()
-					itr.EXPECT().Next().Return(false)
-
-					return *storage.NewIterator[storage.InstallInfo](itr)
-				})
 				mocks.sourcesList.EXPECT().Put([]byte(alias), storage.SourceInfo{
 					Alias:  alias,
 					URL:    url,
@@ -185,7 +172,7 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 				setupFs(mocks.fs)
 				assert.Nil(t, afero.WriteFile(mocks.fs, filepath.Join(subnetsPath, "subnet-1.yaml"), subnet, perms.ReadWrite))
 
-				// update subnet definitions
+				// upgrade subnet definitions
 				mocks.registry.EXPECT().Get([]byte(spacesSubnet)).Return(storage.RepoList{Repositories: []string{}}, nil)
 				mocks.registry.EXPECT().Put([]byte(spacesSubnet), storage.RepoList{Repositories: []string{alias}}).Return(nil)
 				mocks.subnets.EXPECT().Put([]byte(spacesSubnet), gomock.Any()).Return(nil) // TODO fix
@@ -204,13 +191,6 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 
 					return *storage.NewIterator[storage.Definition[types.Subnet]](itr)
 				})
-				mocks.installedVMs.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.InstallInfo] {
-					itr := mockdb.NewMockIterator(mocks.ctrl)
-					defer itr.EXPECT().Release()
-					itr.EXPECT().Next().Return(false)
-
-					return *storage.NewIterator[storage.InstallInfo](itr)
-				})
 				mocks.sourcesList.EXPECT().Put([]byte(alias), storage.SourceInfo{
 					Alias:  alias,
 					URL:    url,
@@ -228,20 +208,15 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			fs := afero.NewMemMapFs()
 
-			executor := NewMockExecutor(ctrl)
-			installer := NewMockInstaller(ctrl)
-
 			var (
-				registry     *storage.MockStorage[storage.RepoList]
-				sourcesList  *storage.MockStorage[storage.SourceInfo]
-				installedVMs *storage.MockStorage[storage.InstallInfo]
-				vms          *storage.MockStorage[storage.Definition[types.VM]]
-				subnets      *storage.MockStorage[storage.Definition[types.Subnet]]
+				registry    *storage.MockStorage[storage.RepoList]
+				sourcesList *storage.MockStorage[storage.SourceInfo]
+				vms         *storage.MockStorage[storage.Definition[types.VM]]
+				subnets     *storage.MockStorage[storage.Definition[types.Subnet]]
 			)
 
 			registry = storage.NewMockStorage[storage.RepoList](ctrl)
 			sourcesList = storage.NewMockStorage[storage.SourceInfo](ctrl)
-			installedVMs = storage.NewMockStorage[storage.InstallInfo](ctrl)
 			vms = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
 			subnets = storage.NewMockStorage[storage.Definition[types.Subnet]](ctrl)
 
@@ -251,20 +226,16 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 			}
 
 			test.setup(t, mocks{
-				ctrl:         ctrl,
-				fs:           fs,
-				registry:     registry,
-				sourcesList:  sourcesList,
-				installedVMs: installedVMs,
-				executor:     executor,
-				installer:    installer,
-				vms:          vms,
-				subnets:      subnets,
+				ctrl:        ctrl,
+				fs:          fs,
+				registry:    registry,
+				sourcesList: sourcesList,
+				vms:         vms,
+				subnets:     subnets,
 			})
 
 			wf := NewUpdateRepository(
 				UpdateRepositoryConfig{
-					Executor:       executor,
 					RepoName:       repoName,
 					RepositoryPath: repositoryPath,
 					AliasBytes:     aliasBytes,
@@ -274,10 +245,6 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 					Repository:     repository,
 					Registry:       registry,
 					SourcesList:    sourcesList,
-					InstalledVMs:   installedVMs,
-					TmpPath:        tmpPath,
-					PluginPath:     pluginPath,
-					Installer:      installer,
 					Fs:             fs,
 				},
 			)
