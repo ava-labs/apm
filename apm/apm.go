@@ -4,10 +4,12 @@
 package apm
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 
 	"github.com/ava-labs/avalanchego/database"
@@ -63,6 +65,7 @@ type APM struct {
 	repositoriesPath string
 	tmpPath          string
 	pluginPath       string
+	adminAPIEndpoint string
 	fs               afero.Fs
 }
 
@@ -82,6 +85,7 @@ func New(config Config) (*APM, error) {
 		sourcesList:      storage.NewSourceInfo(db),
 		installedVMs:     storage.NewInstalledVMs(db),
 		auth:             config.Auth,
+		adminAPIEndpoint: config.AdminAPIEndpoint,
 		adminClient:      admin.NewClient(fmt.Sprintf("http://%s", config.AdminAPIEndpoint)),
 		installer: workflow.NewVMInstaller(
 			workflow.VMInstallerConfig{
@@ -229,12 +233,16 @@ func (a *APM) joinSubnet(fullName string) error {
 	}
 
 	fmt.Printf("Updating virtual machines...\n")
-	if err := a.adminClient.LoadVMs(); err != nil {
+	if err := a.adminClient.LoadVMs(); errors.Is(err, syscall.ECONNREFUSED) {
+		fmt.Printf("Node at %s was offline. Virtual machines will be available upon node startup.\n", a.adminAPIEndpoint)
+	} else if err != nil {
 		return err
 	}
 
 	fmt.Printf("Whitelisting subnet %s...\n", subnet.GetID())
-	if err := a.adminClient.WhitelistSubnet(subnet.GetID()); err != nil {
+	if err := a.adminClient.WhitelistSubnet(subnet.GetID()); errors.Is(err, syscall.ECONNREFUSED) {
+		fmt.Printf("Node at %s was offline. You'll need to whitelist the subnet upon node restart.\n", a.adminAPIEndpoint)
+	} else if err != nil {
 		return err
 	}
 
