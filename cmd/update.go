@@ -11,7 +11,7 @@ import (
 func update(fs afero.Fs) *cobra.Command {
 	command := &cobra.Command{
 		Use:   "update",
-		Short: "updates repository definitions",
+		Short: "Updates plugin definitions for all tracked repositories.",
 	}
 	command.RunE = func(_ *cobra.Command, _ []string) error {
 		apm, err := initAPM(fs)

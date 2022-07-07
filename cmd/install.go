@@ -12,9 +12,11 @@ func install(fs afero.Fs) *cobra.Command {
 	vm := ""
 	command := &cobra.Command{
 		Use:   "install-vm",
-		Short: "installs a virtual machine by its alias",
+		Short: "Installs a virtual machine by its alias",
 	}
 	command.PersistentFlags().StringVar(&vm, "vm", "", "vm alias to install")
+	command.MarkPersistentFlagRequired("vm")
+
 	command.RunE = func(_ *cobra.Command, _ []string) error {
 		apm, err := initAPM(fs)
 		if err != nil {

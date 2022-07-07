@@ -13,10 +13,12 @@ func joinSubnet(fs afero.Fs) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "join-subnet",
-		Short: "join a subnet by its alias.",
+		Short: "Installs all virtual machines for a subnet.",
 	}
 
 	command.PersistentFlags().StringVar(&subnet, "subnet", "", "subnet alias to join")
+	command.MarkPersistentFlagRequired("subnet")
+
 	command.RunE = func(_ *cobra.Command, _ []string) error {
 		apm, err := initAPM(fs)
 		if err != nil {

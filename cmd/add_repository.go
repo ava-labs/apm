@@ -16,7 +16,11 @@ func addRepository(fs afero.Fs) *cobra.Command {
 		Short: "Adds a custom repository to the list of tracked repositories",
 	}
 	command.PersistentFlags().StringVar(&alias, "alias", "", "alias for the repository")
+	command.MarkPersistentFlagRequired("alias")
+
 	command.PersistentFlags().StringVar(&url, "url", "", "url to the repository")
+	command.MarkPersistentFlagRequired("url")
+
 	command.RunE = func(_ *cobra.Command, _ []string) error {
 		apm, err := initAPM(fs)
 		if err != nil {
