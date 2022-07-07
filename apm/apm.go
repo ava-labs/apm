@@ -293,13 +293,14 @@ func (a *APM) Update() error {
 
 func (a *APM) Upgrade(alias string) error {
 	// If we have an alias specified, upgrade the specified VM.
-	if alias == "" {
+	if alias != "" {
 		return parseAndRun(alias, a.registry, a.upgradeVM)
 	}
 
 	// Otherwise, just upgrade everything.
 	wf := workflow.NewUpgrade(workflow.UpgradeConfig{
 		Executor:     a.executor,
+		RepoFactory:  a.repoFactory,
 		Registry:     a.registry,
 		SourcesList:  a.sourcesList,
 		InstalledVMs: a.installedVMs,
@@ -317,6 +318,7 @@ func (a *APM) upgradeVM(name string) error {
 		workflow.UpgradeVMConfig{
 			Executor:     a.executor,
 			FullVMName:   name,
+			RepoFactory:  a.repoFactory,
 			InstalledVMs: a.installedVMs,
 			TmpPath:      a.tmpPath,
 			PluginPath:   a.pluginPath,
