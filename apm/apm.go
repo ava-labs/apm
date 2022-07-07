@@ -227,7 +227,7 @@ func (a *APM) joinSubnet(fullName string) error {
 	// TODO prompt user, add force flag
 	fmt.Printf("Installing virtual machines for subnet %s.\n", subnet.GetID())
 	for _, vm := range subnet.VMs {
-		if err := a.Install(vm); err != nil {
+		if err := a.Install(strings.Join([]string{alias, vm}, constant.QualifiedNameDelimiter)); err != nil {
 			return err
 		}
 	}
@@ -329,6 +329,10 @@ func (a *APM) upgradeVM(name string) error {
 }
 
 func (a *APM) AddRepository(alias string, url string, branch string) error {
+	if !util.ValidAlias(alias) {
+		return fmt.Errorf("%s is not a valid alias (must be in the form of organization/repository)", alias)
+	}
+
 	wf := workflow.NewAddRepository(
 		workflow.AddRepositoryConfig{
 			SourcesList: a.sourcesList,
@@ -342,25 +346,12 @@ func (a *APM) AddRepository(alias string, url string, branch string) error {
 }
 
 func (a *APM) RemoveRepository(alias string) error {
-	if qualifiedName(alias) {
-		return a.removeRepository(alias)
-	}
-
-	fullName, err := getFullNameForAlias(a.registry, alias)
-	if err != nil {
-		return err
-	}
-
-	return a.removeRepository(fullName)
-}
-
-func (a *APM) removeRepository(name string) error {
-	if name == constant.CoreAlias {
+	if alias == constant.CoreAlias {
 		fmt.Printf("Can't remove %s (required repository).\n", constant.CoreAlias)
 		return nil
 	}
 
-	aliasBytes := []byte(name)
+	aliasBytes := []byte(alias)
 	repoRegistry := a.repoFactory.GetRepository(aliasBytes)
 
 	// delete all the plugin definitions in the repository

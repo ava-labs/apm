@@ -27,12 +27,12 @@ The resulting `apm` binary will be available in `./build/apm`.
 Starts tracking a plugin repository.
 
 ```shell
-apm add-repository --alias foo --url https://github.com/joshua-kim/foobar --branch master
+apm add-repository --alias ava-labs/core --url https://github.com/ava-labs/avalanche-plugins-core.git --branch master
 ```
 
 #### Parameters:
-- `--alias`: The alias of the VM to install.
-- `--url`: The alias of the VM to install.
+- `--alias`: The alias of the repository to track.
+- `--url`: The url to the repository.
 - `--branch`: The branch name to track.
  
 ### install-vm
@@ -111,6 +111,16 @@ apm upgrade
 
 #### Parameters
 - `--vm`: (Optional) The alias of the VM to upgrade. If none is provided, all VMs are upgraded.
+
+### remove-repository
+Stops tracking a repository and wipes all local definitions from that repository.
+
+```shell
+apm remove-repository --alias organization/repository
+```
+
+#### Parameters:
+- `--alias`: The alias of the repository to start tracking.
 
 ## Examples
 

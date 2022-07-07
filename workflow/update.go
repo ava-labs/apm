@@ -78,7 +78,8 @@ func (u Update) Execute() error {
 
 	for itr.Next() {
 		aliasBytes := itr.Key()
-		organization, repo := util.ParseAlias(string(aliasBytes))
+		alias := string(aliasBytes)
+		organization, repo := util.ParseAlias(alias)
 
 		sourceInfo, err := itr.Value()
 		if err != nil {
@@ -92,7 +93,7 @@ func (u Update) Execute() error {
 		}
 
 		if latestCommit == previousCommit {
-			fmt.Printf("Already at latest for %s@%s.\n", repo, latestCommit)
+			fmt.Printf("Already at latest for %s@%s.\n", alias, latestCommit)
 			continue
 		}
 
