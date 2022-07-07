@@ -72,6 +72,7 @@ func New(fs afero.Fs) (*cobra.Command, error) {
 		listRepositories(fs),
 		joinSubnet(fs),
 		addRepository(fs),
+		removeRepository(fs),
 	)
 
 	return rootCmd, nil
