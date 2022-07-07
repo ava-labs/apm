@@ -88,6 +88,7 @@ func (u *UpdateRepository) Execute() error {
 		Alias:  u.repositoryMetadata.Alias,
 		URL:    u.repositoryMetadata.URL,
 		Commit: u.latestCommit,
+		Branch: u.repositoryMetadata.Branch,
 	}
 	if err := u.sourcesList.Put(u.aliasBytes, updatedCheckpoint); err != nil {
 		return err

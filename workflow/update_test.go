@@ -44,9 +44,12 @@ func TestUpdateExecute(t *testing.T) {
 			Password: "password",
 		}
 
+		branch = plumbing.NewBranchReferenceName("branch")
+
 		sourceInfo = storage.SourceInfo{
 			Alias:  alias,
 			URL:    url,
+			Branch: branch,
 			Commit: previousCommit,
 		}
 
@@ -113,7 +116,7 @@ func TestUpdateExecute(t *testing.T) {
 					return *storage.NewIterator[storage.SourceInfo](itr)
 				})
 
-				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, master, &mocks.auth).Return(plumbing.ZeroHash, errWrong)
+				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(plumbing.ZeroHash, errWrong)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Equal(t, errWrong, err)
@@ -148,7 +151,7 @@ func TestUpdateExecute(t *testing.T) {
 					Fs:             fs,
 				})
 
-				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, master, &mocks.auth).Return(latestCommit, nil)
+				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(latestCommit, nil)
 				mocks.repoFactory.EXPECT().GetRepository([]byte(alias)).Return(repository)
 				mocks.executor.EXPECT().Execute(wf).Return(errWrong)
 			},
@@ -173,7 +176,7 @@ func TestUpdateExecute(t *testing.T) {
 					return *storage.NewIterator[storage.SourceInfo](itr)
 				})
 
-				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, master, &mocks.auth).Return(previousCommit, nil)
+				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(previousCommit, nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.NoError(t, err)
@@ -209,7 +212,7 @@ func TestUpdateExecute(t *testing.T) {
 					Fs:             fs,
 				})
 
-				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, master, &mocks.auth).Return(latestCommit, nil)
+				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(latestCommit, nil)
 				mocks.repoFactory.EXPECT().GetRepository([]byte(alias)).Return(repository)
 				mocks.executor.EXPECT().Execute(wf).Return(nil)
 			},

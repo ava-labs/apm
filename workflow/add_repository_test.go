@@ -53,6 +53,7 @@ func TestAddRepositoryExecute(t *testing.T) {
 						storage.SourceInfo{
 							Alias:  "alias",
 							URL:    "url",
+							Branch: "master",
 							Commit: plumbing.ZeroHash,
 						},
 					).
@@ -72,6 +73,7 @@ func TestAddRepositoryExecute(t *testing.T) {
 						storage.SourceInfo{
 							Alias:  "alias",
 							URL:    "url",
+							Branch: "master",
 							Commit: plumbing.ZeroHash,
 						},
 					).
@@ -101,6 +103,7 @@ func TestAddRepositoryExecute(t *testing.T) {
 					SourcesList: sourcesList,
 					Alias:       "alias",
 					URL:         "url",
+					Branch:      "master",
 				},
 			)
 

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/ava-labs/avalanchego/database"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/spf13/afero"
 
@@ -21,7 +20,6 @@ var (
 	_ Workflow = &Update{}
 
 	// TODO configurable branches
-	master = plumbing.NewBranchReferenceName("master")
 )
 
 type UpdateConfig struct {
@@ -88,7 +86,7 @@ func (u Update) Execute() error {
 		}
 		previousCommit := sourceInfo.Commit
 		repositoryPath := filepath.Join(u.repositoriesPath, organization, repo)
-		latestCommit, err := u.gitFactory.GetRepository(sourceInfo.URL, repositoryPath, master, &u.auth)
+		latestCommit, err := u.gitFactory.GetRepository(sourceInfo.URL, repositoryPath, sourceInfo.Branch, &u.auth)
 		if err != nil {
 			return err
 		}

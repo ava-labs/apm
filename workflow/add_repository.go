@@ -18,17 +18,20 @@ func NewAddRepository(config AddRepositoryConfig) *AddRepository {
 		sourcesList: config.SourcesList,
 		alias:       config.Alias,
 		url:         config.URL,
+		branch:      config.Branch,
 	}
 }
 
 type AddRepositoryConfig struct {
 	SourcesList storage.Storage[storage.SourceInfo]
 	Alias, URL  string
+	Branch      plumbing.ReferenceName
 }
 
 type AddRepository struct {
 	sourcesList storage.Storage[storage.SourceInfo]
 	alias, url  string
+	branch      plumbing.ReferenceName
 }
 
 func (a AddRepository) Execute() error {
@@ -43,6 +46,7 @@ func (a AddRepository) Execute() error {
 	unsynced := storage.SourceInfo{
 		Alias:  a.alias,
 		URL:    a.url,
+		Branch: a.branch,
 		Commit: plumbing.ZeroHash, // hasn't been synced yet
 	}
 	return a.sourcesList.Put(aliasBytes, unsynced)

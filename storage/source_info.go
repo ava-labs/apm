@@ -12,9 +12,10 @@ import (
 
 // SourceInfo represents a repository, its source, and the last synced commit.
 type SourceInfo struct {
-	Alias  string        `yaml:"alias"`
-	URL    string        `yaml:"url"`
-	Commit plumbing.Hash `yaml:"commit"`
+	Alias  string                 `yaml:"alias"`
+	URL    string                 `yaml:"url"`
+	Commit plumbing.Hash          `yaml:"commit"`
+	Branch plumbing.ReferenceName `yaml:"branch"`
 }
 
 // RepoList is a list of repositories that support a single plugin alias.
