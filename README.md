@@ -98,7 +98,7 @@ Fetches the latest plugin definitions from all tracked repositories.
 apm list-repositories
 ```
 
-### Upgrade 
+### upgrade
 
 Upgrades a virtual machine binary. If one is not provided, this will upgrade all virtual machine binaries in your
 `avalanchego` plugin path with the latest synced definitions.
