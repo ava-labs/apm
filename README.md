@@ -6,8 +6,9 @@ Avalanche Plugin Manger is a command-line tool to manage virtual machines binari
 [avalanchego](https://github.com/ava-labs/avalanchego).
 
 `apm` allows users to build their own custom repositories to provide virtual machine and subnet definitions outside of
-the [avalanche-plugins-core](https://github.com/ava-labs/avalanche-plugins-core) repository. Core ships with the `apm`,
-but users have the option of adding their own using the `add-repository` command.
+the [avalanche-plugins-core](https://github.com/ava-labs/avalanche-plugins-core) repository. `avalanche-plugins-core`
+is an approved set of plugins and subnets that ships with the `apm`, but users have the option of adding their own using
+the `add-repository` command.
 
 ## Installation
 
@@ -111,6 +112,36 @@ apm upgrade
 - `--vm`: (Optional) The alias of the VM to upgrade. If none is provided, all VMs are upgraded.
 
 ## Examples
+
+###
+1. Install the spaces subnet!
+```shell
+./build/apm join-subnet --subnet spaces
+```
+
+2. You'll see some output like this:
+```text
+$ ./build/apm join-subnet --subnet spaces
+
+Installing virtual machines for subnet Ai42MkKqk8yjXFCpoHXw7rdTWSHiKEMqh5h8gbxwjgkCUfkrk.
+Downloading https://github.com/ava-labs/spacesvm/archive/refs/tags/v0.0.3.tar.gz...
+HTTP response 200 OK
+Calculating checksums...
+Saw expected checksum value of 1ac250f6c40472f22eaf0616fc8c886078a4eaa9b2b85fbb4fb7783a1db6af3f
+Creating sources directory...
+Unpacking ava-labs/avalanche-plugins-core:spacesvm...
+Running install script at scripts/build.sh...
+Building spacesvm in ./build/sqja3uK17MJxfC7AN8nGadBw9JK5BcrsNwNynsqP5Gih8M5Bm
+Building spaces-cli in ./build/spaces-cli
+Moving binary sqja3uK17MJxfC7AN8nGadBw9JK5BcrsNwNynsqP5Gih8M5Bm into plugin directory...
+Cleaning up temporary files...
+Adding virtual machine sqja3uK17MJxfC7AN8nGadBw9JK5BcrsNwNynsqP5Gih8M5Bm to installation registry...
+Successfully installed ava-labs/avalanche-plugins-core:spacesvm@v0.0.4 in /Users/joshua.kim/go/src/github.com/ava-labs/avalanchego/build/plugins/sqja3uK17MJxfC7AN8nGadBw9JK5BcrsNwNynsqP5Gih8M5Bm
+Updating virtual machines...
+Node at 127.0.0.1:9650/ext/admin was offline. Virtual machines will be available upon node startup.
+Whitelisting subnet Ai42MkKqk8yjXFCpoHXw7rdTWSHiKEMqh5h8gbxwjgkCUfkrk...
+Finished installing virtual machines for subnet Ai42MkKqk8yjXFCpoHXw7rdTWSHiKEMqh5h8gbxwjgkCUfkrk.
+```
 
 ### Setting up Credentials for a Private Plugin Repository
 You'll need to specify the `--credentials-file` flag which contains your github personal access token. 
