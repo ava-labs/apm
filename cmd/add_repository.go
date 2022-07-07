@@ -11,6 +11,8 @@ import (
 func addRepository(fs afero.Fs) *cobra.Command {
 	url := ""
 	alias := ""
+	branch := ""
+
 	command := &cobra.Command{
 		Use:   "add-repository",
 		Short: "Adds a custom repository to the list of tracked repositories",
@@ -28,13 +30,19 @@ func addRepository(fs afero.Fs) *cobra.Command {
 		panic(err)
 	}
 
+	command.PersistentFlags().StringVar(&branch, "branch", "", "branch name to track")
+	err = command.MarkPersistentFlagRequired("branch")
+	if err != nil {
+		panic(err)
+	}
+
 	command.RunE = func(_ *cobra.Command, _ []string) error {
 		apm, err := initAPM(fs)
 		if err != nil {
 			return err
 		}
 
-		return apm.AddRepository(alias, url)
+		return apm.AddRepository(alias, url, branch)
 	}
 
 	return command

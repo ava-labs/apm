@@ -106,7 +106,7 @@ func New(config Config) (*APM, error) {
 	if ok, err := a.sourcesList.Has(coreKey); err != nil {
 		return nil, err
 	} else if !ok {
-		err := a.AddRepository(constant.CoreAlias, constant.CoreURL)
+		err := a.AddRepository(constant.CoreAlias, constant.CoreURL, constant.CoreBranch)
 		if err != nil {
 			return nil, err
 		}
@@ -328,12 +328,13 @@ func (a *APM) upgradeVM(name string) error {
 	))
 }
 
-func (a *APM) AddRepository(alias string, url string) error {
+func (a *APM) AddRepository(alias string, url string, branch string) error {
 	wf := workflow.NewAddRepository(
 		workflow.AddRepositoryConfig{
 			SourcesList: a.sourcesList,
 			Alias:       alias,
 			URL:         url,
+			Branch:      plumbing.NewBranchReferenceName(branch),
 		},
 	)
 
@@ -389,14 +390,14 @@ func (a *APM) ListRepositories() error {
 	itr := a.sourcesList.Iterator()
 
 	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
-	fmt.Fprintln(w, "alias\turl")
+	fmt.Fprintln(w, "alias\turl\tbranch")
 	for itr.Next() {
 		metadata, err := itr.Value()
 		if err != nil {
 			return err
 		}
 
-		fmt.Fprintf(w, "%s\t%s\n", metadata.Alias, metadata.URL)
+		fmt.Fprintf(w, "%s\t%s\t%s\n", metadata.Alias, metadata.URL, metadata.Branch)
 	}
 	w.Flush()
 	return nil

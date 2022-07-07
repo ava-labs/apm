@@ -4,7 +4,8 @@
 package constant
 
 const (
-	AppName   = "apm"
-	CoreAlias = "ava-labs/avalanche-plugins-core"
-	CoreURL   = "https://github.com/ava-labs/avalanche-plugins-core.git"
+	AppName    = "apm"
+	CoreAlias  = "ava-labs/avalanche-plugins-core"
+	CoreURL    = "https://github.com/ava-labs/avalanche-plugins-core.git"
+	CoreBranch = "master"
 )

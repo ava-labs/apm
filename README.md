@@ -27,12 +27,13 @@ The resulting `apm` binary will be available in `./build/apm`.
 Starts tracking a plugin repository.
 
 ```shell
-apm add-repository --alias foo --url https://github.com/joshua-kim/foobar
+apm add-repository --alias foo --url https://github.com/joshua-kim/foobar --branch master
 ```
 
 #### Parameters:
 - `--alias`: The alias of the VM to install.
 - `--url`: The alias of the VM to install.
+- `--branch`: The branch name to track.
  
 ### install-vm
 Installs a virtual machine by its alias. 

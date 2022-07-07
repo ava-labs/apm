@@ -31,6 +31,8 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 		spacesSubnet = "spaces"
 	)
 	var (
+		branch = plumbing.NewBranchReferenceName("branch")
+
 		subnetsPath = filepath.Join(repositoryPath, "subnets")
 		vmsPath     = filepath.Join(repositoryPath, "vms")
 
@@ -40,6 +42,7 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 		sourceInfo     = storage.SourceInfo{
 			Alias:  alias,
 			URL:    url,
+			Branch: branch,
 			Commit: previousCommit,
 		}
 	)
@@ -155,6 +158,7 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 				mocks.sourcesList.EXPECT().Put([]byte(alias), storage.SourceInfo{
 					Alias:  alias,
 					URL:    url,
+					Branch: branch,
 					Commit: latestCommit,
 				})
 			},
@@ -190,6 +194,7 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 				mocks.sourcesList.EXPECT().Put([]byte(alias), storage.SourceInfo{
 					Alias:  alias,
 					URL:    url,
+					Branch: branch,
 					Commit: latestCommit,
 				})
 			},
