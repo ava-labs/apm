@@ -42,8 +42,6 @@ type UpgradeVM struct {
 	fullVMName string
 	executor   Executor
 
-	aliasBytes []byte
-
 	repository storage.Repository
 
 	installedVMs storage.Storage[storage.InstallInfo]

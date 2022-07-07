@@ -15,7 +15,10 @@ func uninstall(fs afero.Fs) *cobra.Command {
 		Short: "Uninstalls a virtual machine by its alias",
 	}
 	command.PersistentFlags().StringVar(&vm, "vm", "", "vm alias to install")
-	command.MarkPersistentFlagRequired("vm")
+	err := command.MarkPersistentFlagRequired("vm")
+	if err != nil {
+		panic(err)
+	}
 
 	command.RunE = func(_ *cobra.Command, _ []string) error {
 		apm, err := initAPM(fs)

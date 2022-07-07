@@ -121,10 +121,6 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 		sourcesList *storage.MockStorage[storage.SourceInfo]
 		vms         *storage.MockStorage[storage.Definition[types.VM]]
 		subnets     *storage.MockStorage[storage.Definition[types.Subnet]]
-
-		installer *MockInstaller
-
-		executor *MockExecutor
 	}
 	tests := []struct {
 		name    string

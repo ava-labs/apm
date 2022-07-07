@@ -3,7 +3,6 @@ package workflow
 import (
 	"fmt"
 
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/afero"
 
 	"github.com/ava-labs/apm/storage"
@@ -36,19 +35,9 @@ func NewUpgrade(config UpgradeConfig) *Upgrade {
 }
 
 type Upgrade struct {
-	executor       Executor
-	repoName       string
-	repositoryPath string
+	executor Executor
 
-	aliasBytes []byte
-
-	previousCommit plumbing.Hash
-	latestCommit   plumbing.Hash
-
-	repository storage.Repository
-	registry   storage.Storage[storage.RepoList]
-
-	repositoryMetadata storage.SourceInfo
+	registry storage.Storage[storage.RepoList]
 
 	installedVMs storage.Storage[storage.InstallInfo]
 	sourcesList  storage.Storage[storage.SourceInfo]
