@@ -31,7 +31,7 @@ apm add-repository --alias ava-labs/core --url https://github.com/ava-labs/avala
 ```
 
 #### Parameters:
-- `--alias`: The alias of the repository to track.
+- `--alias`: The alias of the repository to track (must be in the form of `foo/bar` i.e organization/repository).
 - `--url`: The url to the repository.
 - `--branch`: The branch name to track.
  
