@@ -52,7 +52,7 @@ apm install-vm --vm spacesvm
 
 
 ### join-subnet
-Joins a subnet by its alias. Either a partial alias (e.g `spacesvm`) or a fully qualified name including the repository (e.g `ava-labs/core:spacesvm`) to disambiguate between multiple repositories can be used.
+Joins a subnet by its alias. Either a partial alias (e.g `spaces`) or a fully qualified name including the repository (e.g `ava-labs/core:spaces`) to disambiguate between multiple repositories can be used.
 
 This will install dependencies for the subnet by calling `install-vm` on each virtual machine required by the subnet.
 
