@@ -2,7 +2,7 @@
 
 Note: This code is currently in Alpha. Proceed at your own risk.
 
-Avalanche Plugin Manger is a command-line tool to manage virtual machines binaries for
+`apm` is a command-line tool to manage virtual machines binaries for
 [avalanchego](https://github.com/ava-labs/avalanchego).
 
 `apm` allows users to build their own custom repositories to provide virtual machine and subnet definitions outside of
