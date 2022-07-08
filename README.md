@@ -36,7 +36,7 @@ apm add-repository --alias ava-labs/core --url https://github.com/ava-labs/avala
 - `--branch`: The branch name to track.
  
 ### install-vm
-Installs a virtual machine by its alias. 
+Installs a virtual machine by its alias. Either a partial alias (e.g `spacesvm`) or a fully qualified name including the repository (e.g `ava-labs/core:spacesvm`) to disambiguate between multiple repositories can be used.
 
 If multiple matches are found (e.g `repository-1/foovm`, `repository-2/foovm`), you will be required to specify the
 fully qualified name of the virtual machine to disambiguate the repository to install from.
@@ -52,7 +52,7 @@ apm install-vm --vm spacesvm
 
 
 ### join-subnet
-Joins a subnet by its alias.
+Joins a subnet by its alias. Either a partial alias (e.g `spacesvm`) or a fully qualified name including the repository (e.g `ava-labs/core:spacesvm`) to disambiguate between multiple repositories can be used.
 
 This will install dependencies for the subnet by calling `install-vm` on each virtual machine required by the subnet.
 
