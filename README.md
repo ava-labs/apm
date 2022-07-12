@@ -7,7 +7,7 @@ Note: This code is currently in Alpha. Proceed at your own risk.
 
 `apm` allows users to build their own custom repositories to provide virtual machine and subnet definitions outside of
 the [avalanche-plugins-core](https://github.com/ava-labs/avalanche-plugins-core) repository. `avalanche-plugins-core`
-is an approved set of plugins and subnets that ships with the `apm`, but users have the option of adding their own using
+is a community-sourced set of plugins and subnets that ships with the `apm`, but users have the option of adding their own using
 the `add-repository` command.
 
 ## Installation
