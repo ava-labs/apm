@@ -16,11 +16,7 @@ import (
 	"github.com/ava-labs/apm/util"
 )
 
-var (
-	_ Workflow = &Update{}
-
-	// TODO configurable branches
-)
+var _ Workflow = &Update{}
 
 type UpdateConfig struct {
 	Executor         Executor
