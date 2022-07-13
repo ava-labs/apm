@@ -12,7 +12,7 @@ permissions:
   # pull-requests: read
 jobs:
   check-license:
-    name: lint
+    name: check-license
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-go@v3
