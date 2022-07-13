@@ -1,6 +1,6 @@
 # Avalanche Plugin Manager (apm)
 
-Note: This code is currently in Alpha. Proceed at your own risk.
+**Note: This code is currently in Alpha. Proceed at your own risk.**
 
 `apm` is a command-line tool to manage virtual machines binaries for
 [avalanchego](https://github.com/ava-labs/avalanchego).
@@ -11,6 +11,36 @@ is a community-sourced set of plugins and subnets that ships with the `apm`, but
 the `add-repository` command.
 
 ## Installation
+
+### Pre-Built Binaries
+#### Instructions
+
+To download a binary for the latest release, run:
+
+```
+curl -sSfL https://raw.githubusercontent.com/ava-labs/apm/master/scripts/install.sh | sh -s
+```
+
+The binary will be installed inside the `./bin` directory (relative to where the install command was run).
+
+_Downloading binaries from the Github UI will cause permission errors on Mac._
+
+To add the binary to your path, run
+
+```
+cd bin
+export PATH=$PWD:$PATH
+```
+
+To add it to your path permanently, add an export command to your shell initialization script (ex: .bashrc).
+
+#### Installing in Custom Location
+
+To download the binary into a specific directory, run:
+
+```
+curl -sSfL https://raw.githubusercontent.com/ava-labs/apm/master/scripts/install.sh | sh -s -- -b <relative directory>
+```
 
 ### Source
 If you are planning on building from source, you will need [golang](https://go.dev/doc/install) >= 1.18.x installed.
