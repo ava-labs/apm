@@ -120,7 +120,7 @@ func (u *UpdateRepository) update() error {
 	}
 
 	if u.previousCommit == plumbing.ZeroHash {
-		fmt.Printf("Finished initializing definitions for%s@%s.\n", u.repoName, u.latestCommit)
+		fmt.Printf("Finished initializing definitions for %s@%s.\n", u.repoName, u.latestCommit)
 	} else {
 		fmt.Printf("Finished updating definitions from %s to %s@%s.\n", u.previousCommit, u.repoName, u.latestCommit)
 	}
