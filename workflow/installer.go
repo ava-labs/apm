@@ -45,7 +45,7 @@ func (t VMInstaller) Decompress(source string, dest string) error {
 }
 
 func (t VMInstaller) Install(workingDir string, args ...string) error {
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.Command(args[0], args[1:]...) // #nosec G204 installation scripts are assumed to be trusted if a user is tracking a plugin repository
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Dir = workingDir
