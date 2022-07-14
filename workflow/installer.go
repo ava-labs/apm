@@ -17,7 +17,7 @@ type Installer interface {
 	Decompress(source string, dest string) error
 	// Install installs the VM. installScriptPath is a path relative to
 	// workingDir.
-	Install(workingDir string, installScriptPath string) error
+	Install(workingDir string, args ...string) error
 }
 
 var _ Installer = &VMInstaller{}
@@ -44,8 +44,8 @@ func (t VMInstaller) Decompress(source string, dest string) error {
 	return cmd.Run()
 }
 
-func (t VMInstaller) Install(workingDir string, installScriptRelativePath string) error {
-	cmd := exec.Command(installScriptRelativePath)
+func (t VMInstaller) Install(workingDir string, args ...string) error {
+	cmd := exec.Command(args[0], args[1:]...) // #nosec G204 installation scripts are assumed to be trusted if a user is tracking a plugin repository
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Dir = workingDir

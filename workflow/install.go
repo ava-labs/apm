@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"strings"
 
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/spf13/afero"
@@ -111,8 +112,9 @@ func (i Install) Execute() error {
 	}
 
 	if vm.InstallScript != "" {
+		args := strings.Split(vm.InstallScript, " ")
 		fmt.Printf("Running install script at %s...\n", vm.InstallScript)
-		if err := i.installer.Install(workingDir, vm.InstallScript); err != nil {
+		if err := i.installer.Install(workingDir, args...); err != nil {
 			return err
 		}
 	} else {
