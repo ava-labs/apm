@@ -22,7 +22,7 @@ type UpgradeVMConfig struct {
 
 	FullVMName   string
 	RepoFactory  storage.RepositoryFactory
-	InstalledVMs storage.Storage[storage.InstallInfo]
+	InstalledVMs map[string]storage.InstallInfo
 
 	TmpPath    string
 	PluginPath string
@@ -49,7 +49,7 @@ type UpgradeVM struct {
 
 	repoFactory storage.RepositoryFactory
 
-	installedVMs storage.Storage[storage.InstallInfo]
+	installedVMs map[string]storage.InstallInfo
 
 	tmpPath    string
 	pluginPath string
@@ -59,10 +59,7 @@ type UpgradeVM struct {
 }
 
 func (u *UpgradeVM) Execute() error {
-	installInfo, err := u.installedVMs.Get([]byte(u.fullVMName))
-	if err != nil {
-		return err
-	}
+	installInfo, _ := u.installedVMs[u.fullVMName]
 
 	repoAlias, vmName := util.ParseQualifiedName(u.fullVMName)
 	organization, repo := util.ParseAlias(repoAlias)
@@ -70,7 +67,7 @@ func (u *UpgradeVM) Execute() error {
 	var definition storage.Definition[types.VM]
 
 	repository := u.repoFactory.GetRepository([]byte(repoAlias))
-	definition, err = repository.VMs.Get([]byte(vmName))
+	definition, err := repository.VMs.Get([]byte(vmName))
 	if err == database.ErrNotFound {
 		fmt.Printf("Warning - found a vm while upgrading %s which is no longer registered in a repository. You should uninstall this VM to avoid noisy logs. Skipping...\n", u.fullVMName)
 		return nil

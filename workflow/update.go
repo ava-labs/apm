@@ -20,9 +20,9 @@ var _ Workflow = &Update{}
 
 type UpdateConfig struct {
 	Executor         Executor
-	Registry         storage.Storage[storage.RepoList]
-	InstalledVMs     storage.Storage[storage.InstallInfo]
-	SourcesList      storage.Storage[storage.SourceInfo]
+	Registry         map[string]storage.RepoList
+	InstalledVMs     map[string]storage.InstallInfo
+	SourcesList      map[string]storage.SourceInfo
 	DB               database.Database
 	TmpPath          string
 	PluginPath       string
@@ -55,9 +55,9 @@ func NewUpdate(config UpdateConfig) *Update {
 type Update struct {
 	executor         Executor
 	db               database.Database
-	registry         storage.Storage[storage.RepoList]
-	installedVMs     storage.Storage[storage.InstallInfo]
-	sourcesList      storage.Storage[storage.SourceInfo]
+	registry         map[string]storage.RepoList
+	installedVMs     map[string]storage.InstallInfo
+	sourcesList      map[string]storage.SourceInfo
 	installer        Installer
 	auth             http.BasicAuth
 	tmpPath          string
@@ -66,21 +66,14 @@ type Update struct {
 	gitFactory       git.Factory
 	repoFactory      storage.RepositoryFactory
 	fs               afero.Fs
+	stateFile        storage.StateFile
 }
 
 func (u Update) Execute() error {
-	itr := u.sourcesList.Iterator()
-	defer itr.Release()
-
-	for itr.Next() {
-		aliasBytes := itr.Key()
-		alias := string(aliasBytes)
+	for alias, sourceInfo := range u.sourcesList {
+		aliasBytes := []byte(alias)
 		organization, repo := util.ParseAlias(alias)
 
-		sourceInfo, err := itr.Value()
-		if err != nil {
-			return err
-		}
 		previousCommit := sourceInfo.Commit
 		repositoryPath := filepath.Join(u.repositoriesPath, organization, repo)
 		latestCommit, err := u.gitFactory.GetRepository(sourceInfo.URL, repositoryPath, sourceInfo.Branch, &u.auth)

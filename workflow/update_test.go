@@ -13,7 +13,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
-	"gopkg.in/yaml.v3"
 
 	"github.com/ava-labs/apm/git"
 	"github.com/ava-labs/apm/storage"
@@ -56,19 +55,12 @@ func TestUpdateExecute(t *testing.T) {
 		fs = afero.NewMemMapFs()
 	)
 
-	sourceInfoBytes, err := yaml.Marshal(sourceInfo)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	garbageBytes := []byte("garbage")
-
 	type mocks struct {
 		ctrl         *gomock.Controller
 		executor     *MockExecutor
-		registry     *storage.MockStorage[storage.RepoList]
-		installedVMs *storage.MockStorage[storage.InstallInfo]
-		sourcesList  *storage.MockStorage[storage.SourceInfo]
+		registry     map[string]storage.RepoList
+		installedVMs map[string]storage.InstallInfo
+		sourcesList  map[string]storage.SourceInfo
 		db           *mockdb.MockDatabase
 		installer    *MockInstaller
 		gitFactory   *git.MockFactory
@@ -81,41 +73,10 @@ func TestUpdateExecute(t *testing.T) {
 		wantErr assert.ErrorAssertionFunc
 	}{
 		{
-			name: "bad source info",
-			setup: func(mocks mocks) {
-				// iterator with only one key/value pair
-				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
-					itr := mockdb.NewMockIterator(mocks.ctrl)
-					defer itr.EXPECT().Release()
-
-					itr.EXPECT().Next().Return(true)
-					itr.EXPECT().Key().Return([]byte(alias))
-
-					itr.EXPECT().Value().Return(garbageBytes)
-
-					return *storage.NewIterator[storage.SourceInfo](itr)
-				})
-			},
-			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.Error(t, err)
-			},
-		},
-		{
 			name: "cant get latest git head",
 			setup: func(mocks mocks) {
 				// iterator with only one key/value pair
-				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
-					itr := mockdb.NewMockIterator(mocks.ctrl)
-					defer itr.EXPECT().Release()
-
-					itr.EXPECT().Next().Return(true)
-					itr.EXPECT().Key().Return([]byte(alias))
-
-					itr.EXPECT().Value().Return(sourceInfoBytes)
-
-					return *storage.NewIterator[storage.SourceInfo](itr)
-				})
-
+				mocks.sourcesList[alias] = sourceInfo
 				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(plumbing.ZeroHash, errWrong)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
@@ -126,18 +87,7 @@ func TestUpdateExecute(t *testing.T) {
 			name: "workflow fails",
 			setup: func(mocks mocks) {
 				// iterator with only one key/value pair
-				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
-					itr := mockdb.NewMockIterator(mocks.ctrl)
-					defer itr.EXPECT().Release()
-
-					itr.EXPECT().Next().Return(true)
-					itr.EXPECT().Key().Return([]byte(alias))
-
-					itr.EXPECT().Value().Return(sourceInfoBytes)
-
-					return *storage.NewIterator[storage.SourceInfo](itr)
-				})
-
+				mocks.sourcesList[alias] = sourceInfo
 				wf := NewUpdateRepository(UpdateRepositoryConfig{
 					RepoName:       repo,
 					RepositoryPath: repoInstallPath,
@@ -163,19 +113,7 @@ func TestUpdateExecute(t *testing.T) {
 			name: "success single repository no upgrade needed",
 			setup: func(mocks mocks) {
 				// iterator with only one key/value pair
-				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
-					itr := mockdb.NewMockIterator(mocks.ctrl)
-					defer itr.EXPECT().Release()
-
-					itr.EXPECT().Next().Return(true)
-					itr.EXPECT().Key().Return([]byte(alias))
-
-					itr.EXPECT().Value().Return(sourceInfoBytes)
-					itr.EXPECT().Next().Return(false)
-
-					return *storage.NewIterator[storage.SourceInfo](itr)
-				})
-
+				mocks.sourcesList[alias] = sourceInfo
 				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(previousCommit, nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
@@ -186,19 +124,7 @@ func TestUpdateExecute(t *testing.T) {
 			name: "success single repository updates",
 			setup: func(mocks mocks) {
 				// iterator with only one key/value pair
-				mocks.sourcesList.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.SourceInfo] {
-					itr := mockdb.NewMockIterator(mocks.ctrl)
-					defer itr.EXPECT().Release()
-
-					itr.EXPECT().Next().Return(true)
-					itr.EXPECT().Key().Return([]byte(alias))
-
-					itr.EXPECT().Value().Return(sourceInfoBytes)
-					itr.EXPECT().Next().Return(false)
-
-					return *storage.NewIterator[storage.SourceInfo](itr)
-				})
-
+				mocks.sourcesList[alias] = sourceInfo
 				wf := NewUpdateRepository(UpdateRepositoryConfig{
 					RepoName:       repo,
 					RepositoryPath: repoInstallPath,
@@ -226,9 +152,7 @@ func TestUpdateExecute(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
-			var registry *storage.MockStorage[storage.RepoList]
-			var installedVMs *storage.MockStorage[storage.InstallInfo]
-			var sourcesList *storage.MockStorage[storage.SourceInfo]
+			var installedVMs map[string]storage.InstallInfo
 
 			executor := NewMockExecutor(ctrl)
 			db := mockdb.NewMockDatabase(ctrl)
@@ -236,15 +160,15 @@ func TestUpdateExecute(t *testing.T) {
 			gitFactory := git.NewMockFactory(ctrl)
 			repoFactory := storage.NewMockRepositoryFactory(ctrl)
 
-			registry = storage.NewMockStorage[storage.RepoList](ctrl)
-			installedVMs = storage.NewMockStorage[storage.InstallInfo](ctrl)
-			sourcesList = storage.NewMockStorage[storage.SourceInfo](ctrl)
+			registry := make(map[string]storage.RepoList)
+			installedVMs = make(map[string]storage.InstallInfo)
+			sourcesList := make(map[string]storage.SourceInfo)
 
 			test.setup(mocks{
 				ctrl:         ctrl,
 				executor:     executor,
 				registry:     registry,
-				installedVMs: installedVMs,
+				installedVMs: make(map[string]storage.InstallInfo),
 				sourcesList:  sourcesList,
 				db:           db,
 				installer:    installer,

@@ -15,9 +15,9 @@ type UpgradeConfig struct {
 	Executor Executor
 
 	RepoFactory  storage.RepositoryFactory
-	Registry     storage.Storage[storage.RepoList]
-	SourcesList  storage.Storage[storage.SourceInfo]
-	InstalledVMs storage.Storage[storage.InstallInfo]
+	Registry     map[string]storage.RepoList
+	SourcesList  map[string]storage.SourceInfo
+	InstalledVMs map[string]storage.InstallInfo
 
 	TmpPath    string
 	PluginPath string
@@ -42,11 +42,10 @@ func NewUpgrade(config UpgradeConfig) *Upgrade {
 type Upgrade struct {
 	executor Executor
 
-	repoFactory storage.RepositoryFactory
-	registry    storage.Storage[storage.RepoList]
-
-	installedVMs storage.Storage[storage.InstallInfo]
-	sourcesList  storage.Storage[storage.SourceInfo]
+	repoFactory  storage.RepositoryFactory
+	registry     map[string]storage.RepoList
+	sourcesList  map[string]storage.SourceInfo
+	installedVMs map[string]storage.InstallInfo
 
 	tmpPath    string
 	pluginPath string
@@ -58,14 +57,11 @@ type Upgrade struct {
 func (u *Upgrade) Execute() error {
 	upgraded := false
 
-	itr := u.installedVMs.Iterator()
-	defer itr.Release()
-
-	for itr.Next() {
+	for name := range u.installedVMs {
 		wf := NewUpgradeVM(UpgradeVMConfig{
 			Executor:     u.executor,
 			RepoFactory:  u.repoFactory,
-			FullVMName:   string(itr.Key()),
+			FullVMName:   name,
 			InstalledVMs: u.installedVMs,
 			TmpPath:      u.tmpPath,
 			PluginPath:   u.pluginPath,

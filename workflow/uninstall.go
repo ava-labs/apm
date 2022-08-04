@@ -35,7 +35,7 @@ type UninstallConfig struct {
 	Plugin       string
 	RepoAlias    string
 	VMStorage    storage.Storage[storage.Definition[types.VM]]
-	InstalledVMs storage.Storage[storage.InstallInfo]
+	InstalledVMs map[string]storage.InstallInfo
 	Fs           afero.Fs
 	PluginPath   string
 }
@@ -45,18 +45,13 @@ type Uninstall struct {
 	plugin       string
 	repoAlias    string
 	vmStorage    storage.Storage[storage.Definition[types.VM]]
-	installedVMs storage.Storage[storage.InstallInfo]
+	installedVMs map[string]storage.InstallInfo
 	fs           afero.Fs
 	pluginPath   string
 }
 
 func (u Uninstall) Execute() error {
-	ok, err := u.installedVMs.Has([]byte(u.name))
-	if err != nil {
-		return err
-	}
-
-	if !ok {
+	if _, ok := u.installedVMs[u.name]; !ok {
 		fmt.Printf("VM %s is already not installed. Skipping.\n", u.name)
 		return nil
 	}
@@ -88,9 +83,7 @@ func (u Uninstall) Execute() error {
 		}
 	}
 
-	if err := u.installedVMs.Delete([]byte(u.name)); err != nil {
-		return err
-	}
+	delete(u.installedVMs, u.name)
 	fmt.Printf("Successfully uninstalled %s.\n", u.name)
 
 	return nil

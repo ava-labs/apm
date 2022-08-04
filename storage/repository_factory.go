@@ -8,23 +8,24 @@ import (
 	"github.com/ava-labs/avalanchego/database/prefixdb"
 )
 
-var _ RepositoryFactory = repositoryFactory{}
+var _ RepositoryFactory = DiskRepository{}
 
 type RepositoryFactory interface {
 	GetRepository(alias []byte) Repository
 }
 
+// TODO replace with fs-based implementation
 func NewRepositoryFactory(db database.Database) RepositoryFactory {
-	return &repositoryFactory{
+	return &DiskRepository{
 		db: db,
 	}
 }
 
-type repositoryFactory struct {
+type DiskRepository struct {
 	db database.Database
 }
 
-func (r repositoryFactory) GetRepository(alias []byte) Repository {
+func (r DiskRepository) GetRepository(alias []byte) Repository {
 	// all repositories
 	reposDB := prefixdb.New(repositoryPrefix, r.db)
 	// this specific repository

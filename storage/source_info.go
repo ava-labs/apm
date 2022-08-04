@@ -31,7 +31,6 @@ type InstallInfo struct {
 
 // Definition stores a plugin definition alongside the plugin-repository's commit
 // it was downloaded from.
-// TODO gc plugins
 type Definition[T types.Definition] struct {
 	Definition T             `yaml:"definition"`
 	Commit     plumbing.Hash `yaml:"commit"`

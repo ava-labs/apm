@@ -33,10 +33,9 @@ import (
 )
 
 var (
-	dbDir            = "db"
-	repositoryDir    = "repositories"
-	tmpDir           = "tmp"
-	metricsNamespace = "apm_db"
+	dbDir         = "db"
+	repositoryDir = "repositories"
+	tmpDir        = "tmp"
 )
 
 type Config struct {
@@ -45,15 +44,13 @@ type Config struct {
 	AdminAPIEndpoint string
 	PluginDir        string
 	Fs               afero.Fs
+	StateFile        storage.StateFile
 }
 
 type APM struct {
 	db database.Database
 
-	sourcesList  storage.Storage[storage.SourceInfo]
-	installedVMs storage.Storage[storage.InstallInfo]
-	registry     storage.Storage[storage.RepoList]
-	repoFactory  storage.RepositoryFactory
+	repoFactory storage.RepositoryFactory
 
 	executor workflow.Executor
 
@@ -67,11 +64,18 @@ type APM struct {
 	pluginPath       string
 	adminAPIEndpoint string
 	fs               afero.Fs
+	stateFile        *storage.StateFile
 }
 
 func New(config Config) (*APM, error) {
-	dbDir := filepath.Join(config.Directory, dbDir)
-	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{}, metricsNamespace, prometheus.NewRegistry())
+	if err := os.MkdirAll(config.Directory, perms.ReadWriteExecute); err != nil {
+		return nil, err
+	}
+	stateFile, err := storage.NewStateFile(config.Directory)
+	if err != nil {
+		return nil, err
+	}
+	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{}, "apm_db", prometheus.NewRegistry())
 	if err != nil {
 		return nil, err
 	}
@@ -81,9 +85,7 @@ func New(config Config) (*APM, error) {
 		tmpPath:          filepath.Join(config.Directory, tmpDir),
 		pluginPath:       config.PluginDir,
 		db:               db,
-		registry:         storage.NewRegistry(db),
-		sourcesList:      storage.NewSourceInfo(db),
-		installedVMs:     storage.NewInstalledVMs(db),
+		repoFactory:      storage.NewRepositoryFactory(db),
 		auth:             config.Auth,
 		adminAPIEndpoint: config.AdminAPIEndpoint,
 		adminClient:      admin.NewClient(fmt.Sprintf("http://%s", config.AdminAPIEndpoint)),
@@ -93,29 +95,24 @@ func New(config Config) (*APM, error) {
 				URLClient: url.NewClient(),
 			},
 		),
-		executor:    engine.NewWorkflowEngine(),
-		fs:          config.Fs,
-		repoFactory: storage.NewRepositoryFactory(db),
+		executor:  engine.NewWorkflowEngine(stateFile),
+		fs:        config.Fs,
+		stateFile: stateFile,
 	}
 	if err := os.MkdirAll(a.repositoriesPath, perms.ReadWriteExecute); err != nil {
 		return nil, err
 	}
 
-	// TODO simplify this
-	coreKey := []byte(constant.CoreAlias)
-	if ok, err := a.sourcesList.Has(coreKey); err != nil {
-		return nil, err
-	} else if !ok {
+	// Sync the core repository if it hasn't been bootstrapped yet.
+	if _, ok := a.stateFile.Sources[constant.CoreAlias]; !ok {
 		err := a.AddRepository(constant.CoreAlias, constant.CoreURL, constant.CoreBranch)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	repoMetadata, err := a.sourcesList.Get(coreKey)
-	if err != nil {
-		return nil, err
-	}
+	// Guaranteed to have this now since we've bootstrapped
+	repoMetadata, _ := a.stateFile.Sources[constant.CoreAlias]
 
 	if repoMetadata.Commit == plumbing.ZeroHash {
 		fmt.Println("Bootstrap not detected. Bootstrapping...")
@@ -129,7 +126,7 @@ func New(config Config) (*APM, error) {
 	return a, nil
 }
 
-func parseAndRun(alias string, registry storage.Storage[storage.RepoList], command func(string) error) error {
+func parseAndRun(alias string, registry map[string]storage.RepoList, command func(string) error) error {
 	if qualifiedName(alias) {
 		return command(alias)
 	}
@@ -143,22 +140,10 @@ func parseAndRun(alias string, registry storage.Storage[storage.RepoList], comma
 }
 
 func (a *APM) Install(alias string) error {
-	return parseAndRun(alias, a.registry, a.install)
+	return parseAndRun(alias, a.stateFile.RepoList, a.install)
 }
 
 func (a *APM) install(name string) error {
-	nameBytes := []byte(name)
-
-	ok, err := a.installedVMs.Has(nameBytes)
-	if err != nil {
-		return err
-	}
-
-	if ok {
-		fmt.Printf("VM %s is already installed. Skipping.\n", name)
-		return nil
-	}
-
 	repoAlias, plugin := util.ParseQualifiedName(name)
 	organization, repo := util.ParseAlias(repoAlias)
 
@@ -171,7 +156,7 @@ func (a *APM) install(name string) error {
 		Repo:         repo,
 		TmpPath:      a.tmpPath,
 		PluginPath:   a.pluginPath,
-		InstalledVMs: a.installedVMs,
+		InstalledVMs: a.stateFile.InstalledVMs,
 		VMStorage:    repository.VMs,
 		Fs:           a.fs,
 		Installer:    a.installer,
@@ -181,7 +166,7 @@ func (a *APM) install(name string) error {
 }
 
 func (a *APM) Uninstall(alias string) error {
-	return parseAndRun(alias, a.registry, a.uninstall)
+	return parseAndRun(alias, a.stateFile.RepoList, a.uninstall)
 }
 
 func (a *APM) uninstall(name string) error {
@@ -195,17 +180,17 @@ func (a *APM) uninstall(name string) error {
 			Plugin:       plugin,
 			RepoAlias:    alias,
 			VMStorage:    repository.VMs,
-			InstalledVMs: a.installedVMs,
+			InstalledVMs: a.stateFile.InstalledVMs,
 			Fs:           a.fs,
 			PluginPath:   a.pluginPath,
 		},
 	)
 
-	return wf.Execute()
+	return a.executor.Execute(wf)
 }
 
 func (a *APM) JoinSubnet(alias string) error {
-	return parseAndRun(alias, a.registry, a.joinSubnet)
+	return parseAndRun(alias, a.stateFile.RepoList, a.joinSubnet)
 }
 
 func (a *APM) joinSubnet(fullName string) error {
@@ -255,7 +240,7 @@ func (a *APM) Info(alias string) error {
 		return a.install(alias)
 	}
 
-	fullName, err := getFullNameForAlias(a.registry, alias)
+	fullName, err := getFullNameForAlias(a.stateFile.RepoList, alias)
 	if err != nil {
 		return err
 	}
@@ -270,9 +255,9 @@ func (a *APM) info(fullName string) error {
 func (a *APM) Update() error {
 	workflow := workflow.NewUpdate(workflow.UpdateConfig{
 		Executor:         a.executor,
-		Registry:         a.registry,
-		InstalledVMs:     a.installedVMs,
-		SourcesList:      a.sourcesList,
+		Registry:         a.stateFile.RepoList,
+		InstalledVMs:     a.stateFile.InstalledVMs,
+		SourcesList:      a.stateFile.Sources,
 		DB:               a.db,
 		TmpPath:          a.tmpPath,
 		PluginPath:       a.pluginPath,
@@ -294,16 +279,16 @@ func (a *APM) Update() error {
 func (a *APM) Upgrade(alias string) error {
 	// If we have an alias specified, upgrade the specified VM.
 	if alias != "" {
-		return parseAndRun(alias, a.registry, a.upgradeVM)
+		return parseAndRun(alias, a.stateFile.RepoList, a.upgradeVM)
 	}
 
 	// Otherwise, just upgrade everything.
 	wf := workflow.NewUpgrade(workflow.UpgradeConfig{
 		Executor:     a.executor,
 		RepoFactory:  a.repoFactory,
-		Registry:     a.registry,
-		SourcesList:  a.sourcesList,
-		InstalledVMs: a.installedVMs,
+		Registry:     a.stateFile.RepoList,
+		SourcesList:  a.stateFile.Sources,
+		InstalledVMs: a.stateFile.InstalledVMs,
 		TmpPath:      a.tmpPath,
 		PluginPath:   a.pluginPath,
 		Installer:    a.installer,
@@ -319,7 +304,7 @@ func (a *APM) upgradeVM(name string) error {
 			Executor:     a.executor,
 			FullVMName:   name,
 			RepoFactory:  a.repoFactory,
-			InstalledVMs: a.installedVMs,
+			InstalledVMs: a.stateFile.InstalledVMs,
 			TmpPath:      a.tmpPath,
 			PluginPath:   a.pluginPath,
 			Installer:    a.installer,
@@ -335,7 +320,7 @@ func (a *APM) AddRepository(alias string, url string, branch string) error {
 
 	wf := workflow.NewAddRepository(
 		workflow.AddRepositoryConfig{
-			SourcesList: a.sourcesList,
+			SourcesList: a.stateFile.Sources,
 			Alias:       alias,
 			URL:         url,
 			Branch:      plumbing.NewBranchReferenceName(branch),
@@ -346,6 +331,8 @@ func (a *APM) AddRepository(alias string, url string, branch string) error {
 }
 
 func (a *APM) RemoveRepository(alias string) error {
+	defer a.stateFile.Commit()
+
 	if alias == constant.CoreAlias {
 		fmt.Printf("Can't remove %s (required repository).\n", constant.CoreAlias)
 		return nil
@@ -374,20 +361,14 @@ func (a *APM) RemoveRepository(alias string) error {
 	}
 
 	// remove it from our list of tracked repositories
-	return a.sourcesList.Delete(aliasBytes)
+	delete(a.stateFile.Sources, alias)
+	return nil
 }
 
 func (a *APM) ListRepositories() error {
-	itr := a.sourcesList.Iterator()
-
 	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
 	fmt.Fprintln(w, "alias\turl\tbranch")
-	for itr.Next() {
-		metadata, err := itr.Value()
-		if err != nil {
-			return err
-		}
-
+	for _, metadata := range a.stateFile.Sources {
 		fmt.Fprintf(w, "%s\t%s\t%s\n", metadata.Alias, metadata.URL, metadata.Branch)
 	}
 	w.Flush()
@@ -399,12 +380,8 @@ func qualifiedName(name string) bool {
 	return len(parsed) > 1
 }
 
-func getFullNameForAlias(registry storage.Storage[storage.RepoList], alias string) (string, error) {
-	repoList, err := registry.Get([]byte(alias))
-	if err != nil {
-		return "", err
-	}
-
+func getFullNameForAlias(registry map[string]storage.RepoList, alias string) (string, error) {
+	repoList, _ := registry[alias]
 	if len(repoList.Repositories) > 1 {
 		return "", fmt.Errorf("more than one match found for %s. Please specify the fully qualified name. Matches: %s", alias, repoList.Repositories)
 	}

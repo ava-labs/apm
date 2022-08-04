@@ -21,7 +21,7 @@ import (
 func TestUninstallExecute(t *testing.T) {
 	errWrong := fmt.Errorf("something went wrong")
 	pluginBytes := []byte("vm")
-	nameBytes := []byte("organization/repository:vm")
+	name := "organization/repository:vm"
 
 	definition := storage.Definition[types.VM]{
 		Definition: types.VM{
@@ -41,7 +41,7 @@ func TestUninstallExecute(t *testing.T) {
 
 	type mocks struct {
 		vmStorage    *storage.MockStorage[storage.Definition[types.VM]]
-		installedVMs *storage.MockStorage[storage.InstallInfo]
+		installedVMs map[string]storage.InstallInfo
 	}
 	tests := []struct {
 		name    string
@@ -49,18 +49,8 @@ func TestUninstallExecute(t *testing.T) {
 		wantErr assert.ErrorAssertionFunc
 	}{
 		{
-			name: "can't read from installed vms",
-			setup: func(mocks mocks) {
-				mocks.installedVMs.EXPECT().Has(nameBytes).Return(false, errWrong)
-			},
-			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.Equal(t, err, errWrong)
-			},
-		},
-		{
 			name: "vm already uninstalled",
 			setup: func(mocks mocks) {
-				mocks.installedVMs.EXPECT().Has(nameBytes).Return(false, nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Nil(t, err)
@@ -69,7 +59,7 @@ func TestUninstallExecute(t *testing.T) {
 		{
 			name: "can't read from repository vms",
 			setup: func(mocks mocks) {
-				mocks.installedVMs.EXPECT().Has(nameBytes).Return(true, nil)
+				mocks.installedVMs[name] = storage.InstallInfo{}
 				mocks.vmStorage.EXPECT().Get(pluginBytes).Return(storage.Definition[types.VM]{}, errWrong)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
@@ -79,31 +69,18 @@ func TestUninstallExecute(t *testing.T) {
 		{
 			name: "uninstalling an invalid vm",
 			setup: func(mocks mocks) {
-				mocks.installedVMs.EXPECT().Has(nameBytes).Return(true, nil)
+				mocks.installedVMs[name] = storage.InstallInfo{}
 				mocks.vmStorage.EXPECT().Get(pluginBytes).Return(storage.Definition[types.VM]{}, database.ErrNotFound)
-				mocks.installedVMs.EXPECT().Delete(nameBytes).Return(nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Nil(t, err)
 			},
 		},
 		{
-			name: "removing from installation registry fails",
-			setup: func(mocks mocks) {
-				mocks.installedVMs.EXPECT().Has(nameBytes).Return(true, nil)
-				mocks.vmStorage.EXPECT().Get(pluginBytes).Return(definition, nil)
-				mocks.installedVMs.EXPECT().Delete(nameBytes).Return(errWrong)
-			},
-			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.Equal(t, errWrong, err)
-			},
-		},
-		{
 			name: "success",
 			setup: func(mocks mocks) {
-				mocks.installedVMs.EXPECT().Has(nameBytes).Return(true, nil)
+				mocks.installedVMs[name] = storage.InstallInfo{}
 				mocks.vmStorage.EXPECT().Get(pluginBytes).Return(definition, nil)
-				mocks.installedVMs.EXPECT().Delete(nameBytes).Return(nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Nil(t, err)
@@ -116,10 +93,8 @@ func TestUninstallExecute(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
 			var vmStorage *storage.MockStorage[storage.Definition[types.VM]]
-			var installedVMs *storage.MockStorage[storage.InstallInfo]
-
 			vmStorage = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
-			installedVMs = storage.NewMockStorage[storage.InstallInfo](ctrl)
+			installedVMs := make(map[string]storage.InstallInfo)
 
 			test.setup(mocks{
 				vmStorage:    vmStorage,

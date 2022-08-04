@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/ava-labs/avalanchego/database"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
@@ -38,10 +37,9 @@ type UpdateRepositoryConfig struct {
 
 	SourceInfo  storage.SourceInfo
 	Repository  storage.Repository
-	Registry    storage.Storage[storage.RepoList]
-	SourcesList storage.Storage[storage.SourceInfo]
-
-	Fs afero.Fs
+	Registry    map[string]storage.RepoList
+	SourcesList map[string]storage.SourceInfo
+	Fs          afero.Fs
 }
 
 func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
@@ -69,12 +67,11 @@ type UpdateRepository struct {
 	latestCommit   plumbing.Hash
 
 	repository  storage.Repository
-	registry    storage.Storage[storage.RepoList]
-	sourcesList storage.Storage[storage.SourceInfo]
+	registry    map[string]storage.RepoList
+	sourcesList map[string]storage.SourceInfo
 
 	repositoryMetadata storage.SourceInfo
-
-	fs afero.Fs
+	fs                 afero.Fs
 }
 
 func (u *UpdateRepository) Execute() error {
@@ -90,10 +87,7 @@ func (u *UpdateRepository) Execute() error {
 		Commit: u.latestCommit,
 		Branch: u.repositoryMetadata.Branch,
 	}
-	if err := u.sourcesList.Put(u.aliasBytes, updatedCheckpoint); err != nil {
-		return err
-	}
-
+	u.sourcesList[string(u.aliasBytes)] = updatedCheckpoint
 	fmt.Printf("Finished update.\n")
 
 	return nil
@@ -134,7 +128,7 @@ func loadFromYAML[T types.Definition](
 	path string,
 	repositoryAlias []byte,
 	commit plumbing.Hash,
-	registry storage.Storage[storage.RepoList],
+	registry map[string]storage.RepoList,
 	repository storage.Storage[storage.Definition[T]],
 ) error {
 	files, err := afero.ReadDir(fs, path)
@@ -174,17 +168,8 @@ func loadFromYAML[T types.Definition](
 		}
 
 		alias := data[key].GetAlias()
-		aliasBytes := []byte(alias)
 
-		repoList, err := registry.Get(aliasBytes)
-		if err == database.ErrNotFound {
-			repoList = storage.RepoList{ // TODO check if this can be removed
-				Repositories: []string{},
-			}
-		} else if err != nil {
-			return err
-		}
-
+		repoList, _ := registry[alias]
 		repositoryAliasStr := string(repositoryAlias)
 		idx := sort.SearchStrings(repoList.Repositories, repositoryAliasStr)
 
@@ -195,10 +180,8 @@ func loadFromYAML[T types.Definition](
 			repoList.Repositories[idx] = repositoryAliasStr
 		}
 
-		if err := registry.Put(aliasBytes, repoList); err != nil {
-			return err
-		}
-		if err := repository.Put(aliasBytes, definition); err != nil {
+		registry[alias] = repoList
+		if err := repository.Put([]byte(alias), definition); err != nil {
 			return err
 		}
 

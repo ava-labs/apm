@@ -120,8 +120,8 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 
 		fs afero.Fs
 
-		registry    *storage.MockStorage[storage.RepoList]
-		sourcesList *storage.MockStorage[storage.SourceInfo]
+		registry    map[string]storage.RepoList
+		sourcesList map[string]storage.SourceInfo
 		vms         *storage.MockStorage[storage.Definition[types.VM]]
 		subnets     *storage.MockStorage[storage.Definition[types.Subnet]]
 	}
@@ -137,8 +137,6 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 				assert.Nil(t, afero.WriteFile(mocks.fs, filepath.Join(vmsPath, "vm-1.yaml"), vm, perms.ReadWrite))
 
 				// upgrade subnet definitions
-				mocks.registry.EXPECT().Get([]byte(spacesVM)).Return(storage.RepoList{Repositories: []string{}}, nil)
-				mocks.registry.EXPECT().Put([]byte(spacesVM), storage.RepoList{Repositories: []string{alias}}).Return(nil)
 				mocks.vms.EXPECT().Put([]byte(spacesVM), gomock.Any()).Return(nil) // TODO fix
 
 				mocks.vms.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.Definition[types.VM]] {
@@ -155,12 +153,6 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 
 					return *storage.NewIterator[storage.Definition[types.Subnet]](itr)
 				})
-				mocks.sourcesList.EXPECT().Put([]byte(alias), storage.SourceInfo{
-					Alias:  alias,
-					URL:    url,
-					Branch: branch,
-					Commit: latestCommit,
-				})
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.NoError(t, err)
@@ -173,8 +165,6 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 				assert.Nil(t, afero.WriteFile(mocks.fs, filepath.Join(subnetsPath, "subnet-1.yaml"), subnet, perms.ReadWrite))
 
 				// upgrade subnet definitions
-				mocks.registry.EXPECT().Get([]byte(spacesSubnet)).Return(storage.RepoList{Repositories: []string{}}, nil)
-				mocks.registry.EXPECT().Put([]byte(spacesSubnet), storage.RepoList{Repositories: []string{alias}}).Return(nil)
 				mocks.subnets.EXPECT().Put([]byte(spacesSubnet), gomock.Any()).Return(nil) // TODO fix
 
 				mocks.vms.EXPECT().Iterator().DoAndReturn(func() storage.Iterator[storage.Definition[types.VM]] {
@@ -191,12 +181,6 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 
 					return *storage.NewIterator[storage.Definition[types.Subnet]](itr)
 				})
-				mocks.sourcesList.EXPECT().Put([]byte(alias), storage.SourceInfo{
-					Alias:  alias,
-					URL:    url,
-					Branch: branch,
-					Commit: latestCommit,
-				})
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.NoError(t, err)
@@ -210,14 +194,12 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 			fs := afero.NewMemMapFs()
 
 			var (
-				registry    *storage.MockStorage[storage.RepoList]
-				sourcesList *storage.MockStorage[storage.SourceInfo]
-				vms         *storage.MockStorage[storage.Definition[types.VM]]
-				subnets     *storage.MockStorage[storage.Definition[types.Subnet]]
+				vms     *storage.MockStorage[storage.Definition[types.VM]]
+				subnets *storage.MockStorage[storage.Definition[types.Subnet]]
 			)
 
-			registry = storage.NewMockStorage[storage.RepoList](ctrl)
-			sourcesList = storage.NewMockStorage[storage.SourceInfo](ctrl)
+			registry := make(map[string]storage.RepoList)
+			sourcesList := make(map[string]storage.SourceInfo)
 			vms = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
 			subnets = storage.NewMockStorage[storage.Definition[types.Subnet]](ctrl)
 
