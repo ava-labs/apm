@@ -75,7 +75,14 @@ func New(config Config) (*APM, error) {
 	if err != nil {
 		return nil, err
 	}
-	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{}, "apm_db", prometheus.NewRegistry())
+
+	db, err := leveldb.New(
+		filepath.Join(config.Directory, dbDir),
+		[]byte{},
+		logging.NoLog{},
+		"apm_db",
+		prometheus.NewRegistry(),
+	)
 	if err != nil {
 		return nil, err
 	}
