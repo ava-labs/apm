@@ -187,11 +187,11 @@ func TestInstallExecute(t *testing.T) {
 
 			var vmStorage *storage.MockStorage[storage.Definition[types.VM]]
 
-			vmStorage = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
 			stateFile := storage.NewEmptyStateFile("stateFilePath")
 			installer := NewMockInstaller(ctrl)
 			fs := afero.NewMemMapFs()
 			checksummer := checksum.NewMockChecksummer(ctrl)
+			vmStorage = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
 
 			test.setup(mocks{
 				stateFile:   stateFile,

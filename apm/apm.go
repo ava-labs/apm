@@ -334,7 +334,11 @@ func (a *APM) AddRepository(alias string, url string, branch string) error {
 }
 
 func (a *APM) RemoveRepository(alias string) error {
-	defer a.stateFile.Commit()
+	defer func() {
+		if err := a.stateFile.Commit(); err != nil {
+			fmt.Printf("failed to commit the statefile")
+		}
+	}()
 
 	if alias == constant.CoreAlias {
 		fmt.Printf("Can't remove %s (required repository).\n", constant.CoreAlias)

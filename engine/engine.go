@@ -4,6 +4,8 @@
 package engine
 
 import (
+	"fmt"
+
 	"github.com/ava-labs/apm/storage"
 	"github.com/ava-labs/apm/workflow"
 )
@@ -21,6 +23,11 @@ type WorkflowEngine struct {
 }
 
 func (w *WorkflowEngine) Execute(workflow workflow.Workflow) error {
-	defer w.stateFile.Commit()
+	defer func() {
+		if err := w.stateFile.Commit(); err != nil {
+			fmt.Printf("failed to commit the statefile")
+		}
+	}()
+
 	return workflow.Execute()
 }

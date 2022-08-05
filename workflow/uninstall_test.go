@@ -93,8 +93,8 @@ func TestUninstallExecute(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
 			var vmStorage *storage.MockStorage[storage.Definition[types.VM]]
-			vmStorage = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
 			stateFile := storage.NewEmptyStateFile("stateFilePath")
+			vmStorage = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
 
 			test.setup(mocks{
 				vmStorage: vmStorage,
