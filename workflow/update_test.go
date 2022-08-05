@@ -56,16 +56,14 @@ func TestUpdateExecute(t *testing.T) {
 	)
 
 	type mocks struct {
-		ctrl         *gomock.Controller
-		executor     *MockExecutor
-		registry     map[string]storage.RepoList
-		installedVMs map[string]storage.InstallInfo
-		sourcesList  map[string]storage.SourceInfo
-		db           *mockdb.MockDatabase
-		installer    *MockInstaller
-		gitFactory   *git.MockFactory
-		repoFactory  *storage.MockRepositoryFactory
-		auth         http.BasicAuth
+		ctrl        *gomock.Controller
+		executor    *MockExecutor
+		stateFile   storage.StateFile
+		db          *mockdb.MockDatabase
+		installer   *MockInstaller
+		gitFactory  *git.MockFactory
+		repoFactory *storage.MockRepositoryFactory
+		auth        http.BasicAuth
 	}
 	tests := []struct {
 		name    string
@@ -76,7 +74,7 @@ func TestUpdateExecute(t *testing.T) {
 			name: "cant get latest git head",
 			setup: func(mocks mocks) {
 				// iterator with only one key/value pair
-				mocks.sourcesList[alias] = sourceInfo
+				mocks.stateFile.Sources[alias] = sourceInfo
 				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(plumbing.ZeroHash, errWrong)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
@@ -87,7 +85,7 @@ func TestUpdateExecute(t *testing.T) {
 			name: "workflow fails",
 			setup: func(mocks mocks) {
 				// iterator with only one key/value pair
-				mocks.sourcesList[alias] = sourceInfo
+				mocks.stateFile.Sources[alias] = sourceInfo
 				wf := NewUpdateRepository(UpdateRepositoryConfig{
 					RepoName:       repo,
 					RepositoryPath: repoInstallPath,
@@ -95,9 +93,8 @@ func TestUpdateExecute(t *testing.T) {
 					PreviousCommit: previousCommit,
 					LatestCommit:   latestCommit,
 					Repository:     repository,
-					Registry:       mocks.registry,
 					SourceInfo:     sourceInfo,
-					SourcesList:    mocks.sourcesList,
+					StateFile:      mocks.stateFile,
 					Fs:             fs,
 				})
 
@@ -113,7 +110,7 @@ func TestUpdateExecute(t *testing.T) {
 			name: "success single repository no upgrade needed",
 			setup: func(mocks mocks) {
 				// iterator with only one key/value pair
-				mocks.sourcesList[alias] = sourceInfo
+				mocks.stateFile.Sources[alias] = sourceInfo
 				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(previousCommit, nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
@@ -124,7 +121,7 @@ func TestUpdateExecute(t *testing.T) {
 			name: "success single repository updates",
 			setup: func(mocks mocks) {
 				// iterator with only one key/value pair
-				mocks.sourcesList[alias] = sourceInfo
+				mocks.stateFile.Sources[alias] = sourceInfo
 				wf := NewUpdateRepository(UpdateRepositoryConfig{
 					RepoName:       repo,
 					RepositoryPath: repoInstallPath,
@@ -132,9 +129,8 @@ func TestUpdateExecute(t *testing.T) {
 					PreviousCommit: previousCommit,
 					LatestCommit:   latestCommit,
 					Repository:     repository,
-					Registry:       mocks.registry,
+					StateFile:      mocks.stateFile,
 					SourceInfo:     sourceInfo,
-					SourcesList:    mocks.sourcesList,
 					Fs:             fs,
 				})
 
@@ -152,37 +148,29 @@ func TestUpdateExecute(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
-			var installedVMs map[string]storage.InstallInfo
-
 			executor := NewMockExecutor(ctrl)
 			db := mockdb.NewMockDatabase(ctrl)
 			installer := NewMockInstaller(ctrl)
 			gitFactory := git.NewMockFactory(ctrl)
 			repoFactory := storage.NewMockRepositoryFactory(ctrl)
 
-			registry := make(map[string]storage.RepoList)
-			installedVMs = make(map[string]storage.InstallInfo)
-			sourcesList := make(map[string]storage.SourceInfo)
+			stateFile := storage.NewEmptyStateFile("stateFilePath")
 
 			test.setup(mocks{
-				ctrl:         ctrl,
-				executor:     executor,
-				registry:     registry,
-				installedVMs: make(map[string]storage.InstallInfo),
-				sourcesList:  sourcesList,
-				db:           db,
-				installer:    installer,
-				gitFactory:   gitFactory,
-				auth:         auth,
-				repoFactory:  repoFactory,
+				ctrl:        ctrl,
+				executor:    executor,
+				stateFile:   stateFile,
+				db:          db,
+				installer:   installer,
+				gitFactory:  gitFactory,
+				auth:        auth,
+				repoFactory: repoFactory,
 			})
 
 			wf := NewUpdate(
 				UpdateConfig{
 					Executor:         executor,
-					Registry:         registry,
-					InstalledVMs:     installedVMs,
-					SourcesList:      sourcesList,
+					StateFile:        stateFile,
 					DB:               db,
 					TmpPath:          tmpPath,
 					PluginPath:       pluginPath,

@@ -20,38 +20,38 @@ var _ Workflow = &Uninstall{}
 
 func NewUninstall(config UninstallConfig) *Uninstall {
 	return &Uninstall{
-		name:         config.Name,
-		repoAlias:    config.RepoAlias,
-		plugin:       config.Plugin,
-		vmStorage:    config.VMStorage,
-		installedVMs: config.InstalledVMs,
-		fs:           config.Fs,
-		pluginPath:   config.PluginPath,
+		name:       config.Name,
+		repoAlias:  config.RepoAlias,
+		plugin:     config.Plugin,
+		vmStorage:  config.VMStorage,
+		stateFile:  config.StateFile,
+		fs:         config.Fs,
+		pluginPath: config.PluginPath,
 	}
 }
 
 type UninstallConfig struct {
-	Name         string
-	Plugin       string
-	RepoAlias    string
-	VMStorage    storage.Storage[storage.Definition[types.VM]]
-	InstalledVMs map[string]storage.InstallInfo
-	Fs           afero.Fs
-	PluginPath   string
+	Name       string
+	Plugin     string
+	RepoAlias  string
+	VMStorage  storage.Storage[storage.Definition[types.VM]]
+	StateFile  storage.StateFile
+	Fs         afero.Fs
+	PluginPath string
 }
 
 type Uninstall struct {
-	name         string
-	plugin       string
-	repoAlias    string
-	vmStorage    storage.Storage[storage.Definition[types.VM]]
-	installedVMs map[string]storage.InstallInfo
-	fs           afero.Fs
-	pluginPath   string
+	name       string
+	plugin     string
+	repoAlias  string
+	vmStorage  storage.Storage[storage.Definition[types.VM]]
+	stateFile  storage.StateFile
+	fs         afero.Fs
+	pluginPath string
 }
 
 func (u Uninstall) Execute() error {
-	if _, ok := u.installedVMs[u.name]; !ok {
+	if _, ok := u.stateFile.InstalledVMs[u.name]; !ok {
 		fmt.Printf("VM %s is already not installed. Skipping.\n", u.name)
 		return nil
 	}
@@ -83,7 +83,7 @@ func (u Uninstall) Execute() error {
 		}
 	}
 
-	delete(u.installedVMs, u.name)
+	delete(u.stateFile.InstalledVMs, u.name)
 	fmt.Printf("Successfully uninstalled %s.\n", u.name)
 
 	return nil

@@ -28,10 +28,10 @@ type InstallConfig struct {
 	TmpPath      string
 	PluginPath   string
 
-	InstalledVMs map[string]storage.InstallInfo
-	VMStorage    storage.Storage[storage.Definition[types.VM]]
-	Fs           afero.Fs
-	Installer    Installer
+	StateFile storage.StateFile
+	VMStorage storage.Storage[storage.Definition[types.VM]]
+	Fs        afero.Fs
+	Installer Installer
 }
 
 func NewInstall(config InstallConfig) *Install {
@@ -42,7 +42,7 @@ func NewInstall(config InstallConfig) *Install {
 		repo:         config.Repo,
 		tmpPath:      config.TmpPath,
 		pluginPath:   config.PluginPath,
-		installedVMs: config.InstalledVMs,
+		stateFile:    config.StateFile,
 		vmStorage:    config.VMStorage,
 		fs:           config.Fs,
 		installer:    config.Installer,
@@ -58,15 +58,15 @@ type Install struct {
 	tmpPath      string
 	pluginPath   string
 
-	installedVMs map[string]storage.InstallInfo
-	vmStorage    storage.Storage[storage.Definition[types.VM]]
-	fs           afero.Fs
-	installer    Installer
-	checksummer  checksum.Checksummer
+	stateFile   storage.StateFile
+	vmStorage   storage.Storage[storage.Definition[types.VM]]
+	fs          afero.Fs
+	installer   Installer
+	checksummer checksum.Checksummer
 }
 
 func (i Install) Execute() error {
-	_, ok := i.installedVMs[i.name]
+	_, ok := i.stateFile.InstalledVMs[i.name]
 	if ok {
 		fmt.Printf("VM %s is already installed. Skipping.\n", i.name)
 		return nil
@@ -142,7 +142,7 @@ func (i Install) Execute() error {
 	}
 
 	fmt.Printf("Adding virtual machine %s to installation registry...\n", vm.ID)
-	i.installedVMs[i.name] = storage.InstallInfo{
+	i.stateFile.InstalledVMs[i.name] = storage.InstallInfo{
 		ID:      vm.ID,
 		Version: vm.Version,
 	}

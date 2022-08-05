@@ -35,11 +35,10 @@ type UpdateRepositoryConfig struct {
 	PreviousCommit plumbing.Hash
 	LatestCommit   plumbing.Hash
 
-	SourceInfo  storage.SourceInfo
-	Repository  storage.Repository
-	Registry    map[string]storage.RepoList
-	SourcesList map[string]storage.SourceInfo
-	Fs          afero.Fs
+	SourceInfo storage.SourceInfo
+	Repository storage.Repository
+	Fs         afero.Fs
+	StateFile  storage.StateFile
 }
 
 func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
@@ -50,10 +49,9 @@ func NewUpdateRepository(config UpdateRepositoryConfig) *UpdateRepository {
 		previousCommit:     config.PreviousCommit,
 		latestCommit:       config.LatestCommit,
 		repository:         config.Repository,
-		registry:           config.Registry,
-		sourcesList:        config.SourcesList,
 		repositoryMetadata: config.SourceInfo,
 		fs:                 config.Fs,
+		stateFile:          config.StateFile,
 	}
 }
 
@@ -66,9 +64,8 @@ type UpdateRepository struct {
 	previousCommit plumbing.Hash
 	latestCommit   plumbing.Hash
 
-	repository  storage.Repository
-	registry    map[string]storage.RepoList
-	sourcesList map[string]storage.SourceInfo
+	repository storage.Repository
+	stateFile  storage.StateFile
 
 	repositoryMetadata storage.SourceInfo
 	fs                 afero.Fs
@@ -87,7 +84,7 @@ func (u *UpdateRepository) Execute() error {
 		Commit: u.latestCommit,
 		Branch: u.repositoryMetadata.Branch,
 	}
-	u.sourcesList[string(u.aliasBytes)] = updatedCheckpoint
+	u.stateFile.Sources[string(u.aliasBytes)] = updatedCheckpoint
 	fmt.Printf("Finished update.\n")
 
 	return nil
@@ -96,12 +93,12 @@ func (u *UpdateRepository) Execute() error {
 func (u *UpdateRepository) update() error {
 	vmsPath := filepath.Join(u.repositoryPath, vmDir)
 
-	if err := loadFromYAML[types.VM](u.fs, vmKey, vmsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.VMs); err != nil {
+	if err := loadFromYAML[types.VM](u.fs, vmKey, vmsPath, u.aliasBytes, u.latestCommit, u.stateFile, u.repository.VMs); err != nil {
 		return err
 	}
 
 	subnetsPath := filepath.Join(u.repositoryPath, subnetDir)
-	if err := loadFromYAML[types.Subnet](u.fs, subnetKey, subnetsPath, u.aliasBytes, u.latestCommit, u.registry, u.repository.Subnets); err != nil {
+	if err := loadFromYAML[types.Subnet](u.fs, subnetKey, subnetsPath, u.aliasBytes, u.latestCommit, u.stateFile, u.repository.Subnets); err != nil {
 		return err
 	}
 
@@ -128,15 +125,13 @@ func loadFromYAML[T types.Definition](
 	path string,
 	repositoryAlias []byte,
 	commit plumbing.Hash,
-	registry map[string]storage.RepoList,
+	stateFile storage.StateFile,
 	repository storage.Storage[storage.Definition[T]],
 ) error {
 	files, err := afero.ReadDir(fs, path)
 	if err != nil {
 		return err
 	}
-	// globalBatch := registry.NewBatch()
-	// repoBatch := repository.NewBatch()
 
 	for _, file := range files {
 		if file.IsDir() {
@@ -169,7 +164,7 @@ func loadFromYAML[T types.Definition](
 
 		alias := data[key].GetAlias()
 
-		repoList, _ := registry[alias]
+		repoList := stateFile.RepoList[alias]
 		repositoryAliasStr := string(repositoryAlias)
 		idx := sort.SearchStrings(repoList.Repositories, repositoryAliasStr)
 
@@ -180,7 +175,7 @@ func loadFromYAML[T types.Definition](
 			repoList.Repositories[idx] = repositoryAliasStr
 		}
 
-		registry[alias] = repoList
+		stateFile.RepoList[alias] = repoList
 		if err := repository.Put([]byte(alias), definition); err != nil {
 			return err
 		}

@@ -120,10 +120,9 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 
 		fs afero.Fs
 
-		registry    map[string]storage.RepoList
-		sourcesList map[string]storage.SourceInfo
-		vms         *storage.MockStorage[storage.Definition[types.VM]]
-		subnets     *storage.MockStorage[storage.Definition[types.Subnet]]
+		stateFile storage.StateFile
+		vms       *storage.MockStorage[storage.Definition[types.VM]]
+		subnets   *storage.MockStorage[storage.Definition[types.Subnet]]
 	}
 	tests := []struct {
 		name    string
@@ -198,8 +197,7 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 				subnets *storage.MockStorage[storage.Definition[types.Subnet]]
 			)
 
-			registry := make(map[string]storage.RepoList)
-			sourcesList := make(map[string]storage.SourceInfo)
+			stateFile := storage.NewEmptyStateFile("stateFilePath")
 			vms = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
 			subnets = storage.NewMockStorage[storage.Definition[types.Subnet]](ctrl)
 
@@ -209,12 +207,11 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 			}
 
 			test.setup(t, mocks{
-				ctrl:        ctrl,
-				fs:          fs,
-				registry:    registry,
-				sourcesList: sourcesList,
-				vms:         vms,
-				subnets:     subnets,
+				ctrl:      ctrl,
+				fs:        fs,
+				stateFile: stateFile,
+				vms:       vms,
+				subnets:   subnets,
 			})
 
 			wf := NewUpdateRepository(
@@ -226,8 +223,7 @@ func TestUpdateRepositoryExecute(t *testing.T) {
 					LatestCommit:   latestCommit,
 					SourceInfo:     sourceInfo,
 					Repository:     repository,
-					Registry:       registry,
-					SourcesList:    sourcesList,
+					StateFile:      stateFile,
 					Fs:             fs,
 				},
 			)

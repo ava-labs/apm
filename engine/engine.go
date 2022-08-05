@@ -10,14 +10,14 @@ import (
 
 var _ workflow.Executor = &WorkflowEngine{}
 
-func NewWorkflowEngine(stateFile *storage.StateFile) *WorkflowEngine {
+func NewWorkflowEngine(stateFile storage.StateFile) *WorkflowEngine {
 	return &WorkflowEngine{
 		stateFile: stateFile,
 	}
 }
 
 type WorkflowEngine struct {
-	stateFile *storage.StateFile
+	stateFile storage.StateFile
 }
 
 func (w *WorkflowEngine) Execute(workflow workflow.Workflow) error {

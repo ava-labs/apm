@@ -71,11 +71,11 @@ func TestInstallExecute(t *testing.T) {
 	errWrong := fmt.Errorf("something went wrong")
 
 	type mocks struct {
-		installedVMs map[string]storage.InstallInfo
-		vmStorage    *storage.MockStorage[storage.Definition[types.VM]]
-		installer    *MockInstaller
-		checksummer  *checksum.MockChecksummer
-		fs           afero.Fs
+		stateFile   storage.StateFile
+		vmStorage   *storage.MockStorage[storage.Definition[types.VM]]
+		installer   *MockInstaller
+		checksummer *checksum.MockChecksummer
+		fs          afero.Fs
 	}
 	tests := []struct {
 		name    string
@@ -187,18 +187,18 @@ func TestInstallExecute(t *testing.T) {
 
 			var vmStorage *storage.MockStorage[storage.Definition[types.VM]]
 
-			installedVMs := make(map[string]storage.InstallInfo)
 			vmStorage = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
+			stateFile := storage.NewEmptyStateFile("stateFilePath")
 			installer := NewMockInstaller(ctrl)
 			fs := afero.NewMemMapFs()
 			checksummer := checksum.NewMockChecksummer(ctrl)
 
 			test.setup(mocks{
-				installedVMs: installedVMs,
-				vmStorage:    vmStorage,
-				installer:    installer,
-				fs:           fs,
-				checksummer:  checksummer,
+				stateFile:   stateFile,
+				vmStorage:   vmStorage,
+				installer:   installer,
+				fs:          fs,
+				checksummer: checksummer,
 			})
 
 			wf := NewInstall(
@@ -209,7 +209,7 @@ func TestInstallExecute(t *testing.T) {
 					Repo:         "repo",
 					TmpPath:      "tmpPath",
 					PluginPath:   "pluginPath",
-					InstalledVMs: installedVMs,
+					StateFile:    stateFile,
 					VMStorage:    vmStorage,
 					Fs:           fs,
 					Installer:    installer,

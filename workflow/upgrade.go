@@ -14,10 +14,8 @@ import (
 type UpgradeConfig struct {
 	Executor Executor
 
-	RepoFactory  storage.RepositoryFactory
-	Registry     map[string]storage.RepoList
-	SourcesList  map[string]storage.SourceInfo
-	InstalledVMs map[string]storage.InstallInfo
+	RepoFactory storage.RepositoryFactory
+	StateFile   storage.StateFile
 
 	TmpPath    string
 	PluginPath string
@@ -27,25 +25,21 @@ type UpgradeConfig struct {
 
 func NewUpgrade(config UpgradeConfig) *Upgrade {
 	return &Upgrade{
-		executor:     config.Executor,
-		repoFactory:  config.RepoFactory,
-		registry:     config.Registry,
-		installedVMs: config.InstalledVMs,
-		tmpPath:      config.TmpPath,
-		pluginPath:   config.PluginPath,
-		installer:    config.Installer,
-		sourcesList:  config.SourcesList,
-		fs:           config.Fs,
+		executor:    config.Executor,
+		repoFactory: config.RepoFactory,
+		tmpPath:     config.TmpPath,
+		pluginPath:  config.PluginPath,
+		installer:   config.Installer,
+		stateFile:   config.StateFile,
+		fs:          config.Fs,
 	}
 }
 
 type Upgrade struct {
 	executor Executor
 
-	repoFactory  storage.RepositoryFactory
-	registry     map[string]storage.RepoList
-	sourcesList  map[string]storage.SourceInfo
-	installedVMs map[string]storage.InstallInfo
+	repoFactory storage.RepositoryFactory
+	stateFile   storage.StateFile
 
 	tmpPath    string
 	pluginPath string
@@ -57,16 +51,16 @@ type Upgrade struct {
 func (u *Upgrade) Execute() error {
 	upgraded := false
 
-	for name := range u.installedVMs {
+	for name := range u.stateFile.InstalledVMs {
 		wf := NewUpgradeVM(UpgradeVMConfig{
-			Executor:     u.executor,
-			RepoFactory:  u.repoFactory,
-			FullVMName:   name,
-			InstalledVMs: u.installedVMs,
-			TmpPath:      u.tmpPath,
-			PluginPath:   u.pluginPath,
-			Installer:    u.installer,
-			Fs:           u.fs,
+			Executor:    u.executor,
+			RepoFactory: u.repoFactory,
+			FullVMName:  name,
+			StateFile:   u.stateFile,
+			TmpPath:     u.tmpPath,
+			PluginPath:  u.pluginPath,
+			Installer:   u.installer,
+			Fs:          u.fs,
 		})
 
 		err := u.executor.Execute(wf)

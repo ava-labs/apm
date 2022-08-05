@@ -64,7 +64,7 @@ type APM struct {
 	pluginPath       string
 	adminAPIEndpoint string
 	fs               afero.Fs
-	stateFile        *storage.StateFile
+	stateFile        storage.StateFile
 }
 
 func New(config Config) (*APM, error) {
@@ -112,7 +112,7 @@ func New(config Config) (*APM, error) {
 	}
 
 	// Guaranteed to have this now since we've bootstrapped
-	repoMetadata, _ := a.stateFile.Sources[constant.CoreAlias]
+	repoMetadata := a.stateFile.Sources[constant.CoreAlias]
 
 	if repoMetadata.Commit == plumbing.ZeroHash {
 		fmt.Println("Bootstrap not detected. Bootstrapping...")
@@ -126,12 +126,12 @@ func New(config Config) (*APM, error) {
 	return a, nil
 }
 
-func parseAndRun(alias string, registry map[string]storage.RepoList, command func(string) error) error {
+func parseAndRun(alias string, stateFile storage.StateFile, command func(string) error) error {
 	if qualifiedName(alias) {
 		return command(alias)
 	}
 
-	fullName, err := getFullNameForAlias(registry, alias)
+	fullName, err := getFullNameForAlias(stateFile.RepoList, alias)
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func parseAndRun(alias string, registry map[string]storage.RepoList, command fun
 }
 
 func (a *APM) Install(alias string) error {
-	return parseAndRun(alias, a.stateFile.RepoList, a.install)
+	return parseAndRun(alias, a.stateFile, a.install)
 }
 
 func (a *APM) install(name string) error {
@@ -156,7 +156,7 @@ func (a *APM) install(name string) error {
 		Repo:         repo,
 		TmpPath:      a.tmpPath,
 		PluginPath:   a.pluginPath,
-		InstalledVMs: a.stateFile.InstalledVMs,
+		StateFile:    a.stateFile,
 		VMStorage:    repository.VMs,
 		Fs:           a.fs,
 		Installer:    a.installer,
@@ -166,7 +166,7 @@ func (a *APM) install(name string) error {
 }
 
 func (a *APM) Uninstall(alias string) error {
-	return parseAndRun(alias, a.stateFile.RepoList, a.uninstall)
+	return parseAndRun(alias, a.stateFile, a.uninstall)
 }
 
 func (a *APM) uninstall(name string) error {
@@ -176,13 +176,13 @@ func (a *APM) uninstall(name string) error {
 
 	wf := workflow.NewUninstall(
 		workflow.UninstallConfig{
-			Name:         name,
-			Plugin:       plugin,
-			RepoAlias:    alias,
-			VMStorage:    repository.VMs,
-			InstalledVMs: a.stateFile.InstalledVMs,
-			Fs:           a.fs,
-			PluginPath:   a.pluginPath,
+			Name:       name,
+			Plugin:     plugin,
+			RepoAlias:  alias,
+			VMStorage:  repository.VMs,
+			StateFile:  a.stateFile,
+			Fs:         a.fs,
+			PluginPath: a.pluginPath,
 		},
 	)
 
@@ -190,7 +190,7 @@ func (a *APM) uninstall(name string) error {
 }
 
 func (a *APM) JoinSubnet(alias string) error {
-	return parseAndRun(alias, a.stateFile.RepoList, a.joinSubnet)
+	return parseAndRun(alias, a.stateFile, a.joinSubnet)
 }
 
 func (a *APM) joinSubnet(fullName string) error {
@@ -255,9 +255,7 @@ func (a *APM) info(fullName string) error {
 func (a *APM) Update() error {
 	workflow := workflow.NewUpdate(workflow.UpdateConfig{
 		Executor:         a.executor,
-		Registry:         a.stateFile.RepoList,
-		InstalledVMs:     a.stateFile.InstalledVMs,
-		SourcesList:      a.stateFile.Sources,
+		StateFile:        a.stateFile,
 		DB:               a.db,
 		TmpPath:          a.tmpPath,
 		PluginPath:       a.pluginPath,
@@ -279,20 +277,18 @@ func (a *APM) Update() error {
 func (a *APM) Upgrade(alias string) error {
 	// If we have an alias specified, upgrade the specified VM.
 	if alias != "" {
-		return parseAndRun(alias, a.stateFile.RepoList, a.upgradeVM)
+		return parseAndRun(alias, a.stateFile, a.upgradeVM)
 	}
 
 	// Otherwise, just upgrade everything.
 	wf := workflow.NewUpgrade(workflow.UpgradeConfig{
-		Executor:     a.executor,
-		RepoFactory:  a.repoFactory,
-		Registry:     a.stateFile.RepoList,
-		SourcesList:  a.stateFile.Sources,
-		InstalledVMs: a.stateFile.InstalledVMs,
-		TmpPath:      a.tmpPath,
-		PluginPath:   a.pluginPath,
-		Installer:    a.installer,
-		Fs:           a.fs,
+		Executor:    a.executor,
+		RepoFactory: a.repoFactory,
+		StateFile:   a.stateFile,
+		TmpPath:     a.tmpPath,
+		PluginPath:  a.pluginPath,
+		Installer:   a.installer,
+		Fs:          a.fs,
 	})
 
 	return a.executor.Execute(wf)
@@ -301,14 +297,14 @@ func (a *APM) Upgrade(alias string) error {
 func (a *APM) upgradeVM(name string) error {
 	return a.executor.Execute(workflow.NewUpgradeVM(
 		workflow.UpgradeVMConfig{
-			Executor:     a.executor,
-			FullVMName:   name,
-			RepoFactory:  a.repoFactory,
-			InstalledVMs: a.stateFile.InstalledVMs,
-			TmpPath:      a.tmpPath,
-			PluginPath:   a.pluginPath,
-			Installer:    a.installer,
-			Fs:           a.fs,
+			Executor:    a.executor,
+			FullVMName:  name,
+			RepoFactory: a.repoFactory,
+			StateFile:   a.stateFile,
+			TmpPath:     a.tmpPath,
+			PluginPath:  a.pluginPath,
+			Installer:   a.installer,
+			Fs:          a.fs,
 		},
 	))
 }
@@ -381,7 +377,7 @@ func qualifiedName(name string) bool {
 }
 
 func getFullNameForAlias(registry map[string]storage.RepoList, alias string) (string, error) {
-	repoList, _ := registry[alias]
+	repoList := registry[alias]
 	if len(repoList.Repositories) > 1 {
 		return "", fmt.Errorf("more than one match found for %s. Please specify the fully qualified name. Matches: %s", alias, repoList.Repositories)
 	}

@@ -20,9 +20,9 @@ var ErrAlreadyUpdated = errors.New("already up-to-date")
 type UpgradeVMConfig struct {
 	Executor Executor
 
-	FullVMName   string
-	RepoFactory  storage.RepositoryFactory
-	InstalledVMs map[string]storage.InstallInfo
+	FullVMName  string
+	RepoFactory storage.RepositoryFactory
+	StateFile   storage.StateFile
 
 	TmpPath    string
 	PluginPath string
@@ -32,14 +32,14 @@ type UpgradeVMConfig struct {
 
 func NewUpgradeVM(config UpgradeVMConfig) *UpgradeVM {
 	return &UpgradeVM{
-		executor:     config.Executor,
-		fullVMName:   config.FullVMName,
-		repoFactory:  config.RepoFactory,
-		installedVMs: config.InstalledVMs,
-		tmpPath:      config.TmpPath,
-		pluginPath:   config.PluginPath,
-		installer:    config.Installer,
-		fs:           config.Fs,
+		executor:    config.Executor,
+		fullVMName:  config.FullVMName,
+		repoFactory: config.RepoFactory,
+		stateFile:   config.StateFile,
+		tmpPath:     config.TmpPath,
+		pluginPath:  config.PluginPath,
+		installer:   config.Installer,
+		fs:          config.Fs,
 	}
 }
 
@@ -49,7 +49,7 @@ type UpgradeVM struct {
 
 	repoFactory storage.RepositoryFactory
 
-	installedVMs map[string]storage.InstallInfo
+	stateFile storage.StateFile
 
 	tmpPath    string
 	pluginPath string
@@ -59,7 +59,7 @@ type UpgradeVM struct {
 }
 
 func (u *UpgradeVM) Execute() error {
-	installInfo, _ := u.installedVMs[u.fullVMName]
+	installInfo := u.stateFile.InstalledVMs[u.fullVMName]
 
 	repoAlias, vmName := util.ParseQualifiedName(u.fullVMName)
 	organization, repo := util.ParseAlias(repoAlias)
@@ -96,7 +96,7 @@ func (u *UpgradeVM) Execute() error {
 			Repo:         repo,
 			TmpPath:      u.tmpPath,
 			PluginPath:   u.pluginPath,
-			InstalledVMs: u.installedVMs,
+			StateFile:    u.stateFile,
 			VMStorage:    repository.VMs,
 			Installer:    u.installer,
 			Fs:           u.fs,

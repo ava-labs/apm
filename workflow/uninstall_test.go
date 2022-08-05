@@ -40,8 +40,8 @@ func TestUninstallExecute(t *testing.T) {
 	}
 
 	type mocks struct {
-		vmStorage    *storage.MockStorage[storage.Definition[types.VM]]
-		installedVMs map[string]storage.InstallInfo
+		vmStorage *storage.MockStorage[storage.Definition[types.VM]]
+		stateFile storage.StateFile
 	}
 	tests := []struct {
 		name    string
@@ -59,7 +59,7 @@ func TestUninstallExecute(t *testing.T) {
 		{
 			name: "can't read from repository vms",
 			setup: func(mocks mocks) {
-				mocks.installedVMs[name] = storage.InstallInfo{}
+				mocks.stateFile.InstalledVMs[name] = storage.InstallInfo{}
 				mocks.vmStorage.EXPECT().Get(pluginBytes).Return(storage.Definition[types.VM]{}, errWrong)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
@@ -69,7 +69,7 @@ func TestUninstallExecute(t *testing.T) {
 		{
 			name: "uninstalling an invalid vm",
 			setup: func(mocks mocks) {
-				mocks.installedVMs[name] = storage.InstallInfo{}
+				mocks.stateFile.InstalledVMs[name] = storage.InstallInfo{}
 				mocks.vmStorage.EXPECT().Get(pluginBytes).Return(storage.Definition[types.VM]{}, database.ErrNotFound)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
@@ -79,7 +79,7 @@ func TestUninstallExecute(t *testing.T) {
 		{
 			name: "success",
 			setup: func(mocks mocks) {
-				mocks.installedVMs[name] = storage.InstallInfo{}
+				mocks.stateFile.InstalledVMs[name] = storage.InstallInfo{}
 				mocks.vmStorage.EXPECT().Get(pluginBytes).Return(definition, nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
@@ -94,21 +94,21 @@ func TestUninstallExecute(t *testing.T) {
 
 			var vmStorage *storage.MockStorage[storage.Definition[types.VM]]
 			vmStorage = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
-			installedVMs := make(map[string]storage.InstallInfo)
+			stateFile := storage.NewEmptyStateFile("stateFilePath")
 
 			test.setup(mocks{
-				vmStorage:    vmStorage,
-				installedVMs: installedVMs,
+				vmStorage: vmStorage,
+				stateFile: stateFile,
 			})
 
 			wf := NewUninstall(
 				UninstallConfig{
-					Name:         "organization/repository:vm",
-					Plugin:       "vm",
-					RepoAlias:    "organization/repository",
-					VMStorage:    vmStorage,
-					InstalledVMs: installedVMs,
-					Fs:           afero.NewMemMapFs(),
+					Name:      "organization/repository:vm",
+					Plugin:    "vm",
+					RepoAlias: "organization/repository",
+					VMStorage: vmStorage,
+					StateFile: stateFile,
+					Fs:        afero.NewMemMapFs(),
 				},
 			)
 

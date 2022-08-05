@@ -20,9 +20,6 @@ var _ Workflow = &Update{}
 
 type UpdateConfig struct {
 	Executor         Executor
-	Registry         map[string]storage.RepoList
-	InstalledVMs     map[string]storage.InstallInfo
-	SourcesList      map[string]storage.SourceInfo
 	DB               database.Database
 	TmpPath          string
 	PluginPath       string
@@ -32,32 +29,28 @@ type UpdateConfig struct {
 	GitFactory       git.Factory
 	RepoFactory      storage.RepositoryFactory
 	Fs               afero.Fs
+	StateFile        storage.StateFile
 }
 
 func NewUpdate(config UpdateConfig) *Update {
 	return &Update{
 		executor:         config.Executor,
-		registry:         config.Registry,
-		installedVMs:     config.InstalledVMs,
 		db:               config.DB,
 		tmpPath:          config.TmpPath,
 		pluginPath:       config.PluginPath,
 		installer:        config.Installer,
-		sourcesList:      config.SourcesList,
 		repositoriesPath: config.RepositoriesPath,
 		auth:             config.Auth,
 		gitFactory:       config.GitFactory,
 		repoFactory:      config.RepoFactory,
 		fs:               config.Fs,
+		stateFile:        config.StateFile,
 	}
 }
 
 type Update struct {
 	executor         Executor
 	db               database.Database
-	registry         map[string]storage.RepoList
-	installedVMs     map[string]storage.InstallInfo
-	sourcesList      map[string]storage.SourceInfo
 	installer        Installer
 	auth             http.BasicAuth
 	tmpPath          string
@@ -70,7 +63,7 @@ type Update struct {
 }
 
 func (u Update) Execute() error {
-	for alias, sourceInfo := range u.sourcesList {
+	for alias, sourceInfo := range u.stateFile.Sources {
 		aliasBytes := []byte(alias)
 		organization, repo := util.ParseAlias(alias)
 
@@ -93,9 +86,8 @@ func (u Update) Execute() error {
 			PreviousCommit: previousCommit,
 			LatestCommit:   latestCommit,
 			Repository:     u.repoFactory.GetRepository(aliasBytes),
-			Registry:       u.registry,
 			SourceInfo:     sourceInfo,
-			SourcesList:    u.sourcesList,
+			StateFile:      u.stateFile,
 			Fs:             u.fs,
 		})
 

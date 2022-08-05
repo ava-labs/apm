@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/ava-labs/avalanchego/utils/perms"
-	"github.com/gofrs/flock"
 	"gopkg.in/yaml.v3"
 )
 
@@ -14,27 +13,30 @@ const (
 	stateFile = "apm.state"
 )
 
-func NewStateFile(path string) (*StateFile, error) {
-	result := StateFile{
+func NewEmptyStateFile(path string) StateFile {
+	return StateFile{
 		Sources:      make(map[string]SourceInfo),
 		RepoList:     make(map[string]RepoList),
 		InstalledVMs: make(map[string]InstallInfo),
 		path:         filepath.Join(path, stateFile),
 	}
+}
+func NewStateFile(path string) (StateFile, error) {
+	result := NewEmptyStateFile(path)
 
 	b, err := os.ReadFile(result.path)
 	var pathError *os.PathError
 	if errors.As(err, &pathError) {
 		// need to initialize the StateFile on Commit
 	} else if err != nil {
-		return nil, err
+		return StateFile{}, err
 	}
 
 	if err := yaml.Unmarshal(b, result); err != nil {
-		return nil, err
+		return StateFile{}, err
 	}
 
-	return &result, nil
+	return result, nil
 }
 
 // StateFile is the representation of the current APM state.
@@ -47,10 +49,7 @@ type StateFile struct {
 	// Mapping of each installed vm's alias to the version installed
 	InstalledVMs map[string]InstallInfo `yaml:"installedVMs,omitempty"`
 
-	path     string
-	lockfile *flock.Flock
-	encoder  *yaml.Encoder
-	f        *os.File
+	path string
 }
 
 func (s *StateFile) Commit() error {
