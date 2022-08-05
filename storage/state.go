@@ -21,6 +21,7 @@ func NewEmptyStateFile(path string) StateFile {
 		path:         filepath.Join(path, stateFile),
 	}
 }
+
 func NewStateFile(path string) (StateFile, error) {
 	result := NewEmptyStateFile(path)
 
