@@ -3,8 +3,6 @@
 
 package types
 
-// import "github.com/ava-labs/avalanchego/subnets"
-//
 var _ Definition = &Subnet{}
 
 type Subnet struct {
