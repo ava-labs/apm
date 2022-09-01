@@ -3,21 +3,18 @@
 
 package types
 
-import "github.com/ava-labs/avalanchego/version"
-
 var _ Definition = &VM{}
 
 type VM struct {
-	ID            string           `yaml:"id"`
-	Alias         string           `yaml:"alias"`
-	Homepage      string           `yaml:"homepage"`
-	Description   string           `yaml:"description"`
-	Maintainers   []string         `yaml:"maintainers"`
-	InstallScript string           `yaml:"installScript"`
-	BinaryPath    string           `yaml:"binaryPath"`
-	URL           string           `yaml:"url"`
-	SHA256        string           `yaml:"sha256"`
-	Version       version.Semantic `yaml:"version"`
+	ID            string   `yaml:"id"`
+	Alias         string   `yaml:"alias"`
+	Homepage      string   `yaml:"homepage"`
+	Description   string   `yaml:"description"`
+	Maintainers   []string `yaml:"maintainers"`
+	InstallScript string   `yaml:"installScript"`
+	BinaryPath    string   `yaml:"binaryPath"`
+	URL           string   `yaml:"url"`
+	SHA256        string   `yaml:"sha256"`
 }
 
 func (vm VM) GetID() string {

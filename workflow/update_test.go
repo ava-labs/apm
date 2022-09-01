@@ -13,10 +13,10 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/apm/git"
-	"github.com/ava-labs/apm/storage"
-	mockdb "github.com/ava-labs/apm/storage/mocks"
+	"github.com/ava-labs/apm/state"
 )
 
 func TestUpdateExecute(t *testing.T) {
@@ -33,10 +33,9 @@ func TestUpdateExecute(t *testing.T) {
 	var (
 		errWrong = fmt.Errorf("something went wrong")
 
-		previousCommit  = plumbing.Hash{1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
-		latestCommit    = plumbing.Hash{2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2}
+		previousCommit  = "old"
+		latestCommit    = "new"
 		repoInstallPath = filepath.Join(repositoriesPath, organization, repo)
-		repository      = storage.Repository{}
 
 		auth = http.BasicAuth{
 			Username: "username",
@@ -45,11 +44,15 @@ func TestUpdateExecute(t *testing.T) {
 
 		branch = plumbing.NewBranchReferenceName("branch")
 
-		sourceInfo = storage.SourceInfo{
-			Alias:  alias,
+		outdated = &state.SourceInfo{
 			URL:    url,
 			Branch: branch,
 			Commit: previousCommit,
+		}
+		updated = &state.SourceInfo{
+			URL:    url,
+			Branch: branch,
+			Commit: latestCommit,
 		}
 
 		fs = afero.NewMemMapFs()
@@ -58,11 +61,10 @@ func TestUpdateExecute(t *testing.T) {
 	type mocks struct {
 		ctrl        *gomock.Controller
 		executor    *MockExecutor
-		stateFile   storage.StateFile
-		db          *mockdb.MockDatabase
+		stateFile   state.File
 		installer   *MockInstaller
-		gitFactory  *git.MockFactory
-		repoFactory *storage.MockRepositoryFactory
+		git         *git.MockFactory
+		repoFactory *state.MockRepositoryFactory
 		auth        http.BasicAuth
 	}
 	tests := []struct {
@@ -74,44 +76,19 @@ func TestUpdateExecute(t *testing.T) {
 			name: "cant get latest git head",
 			setup: func(mocks mocks) {
 				// iterator with only one key/value pair
-				mocks.stateFile.Sources[alias] = sourceInfo
-				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(plumbing.ZeroHash, errWrong)
+				mocks.stateFile.Sources[alias] = updated
+				mocks.git.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return("", errWrong)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Equal(t, errWrong, err)
 			},
 		},
-		{
-			name: "workflow fails",
-			setup: func(mocks mocks) {
-				// iterator with only one key/value pair
-				mocks.stateFile.Sources[alias] = sourceInfo
-				wf := NewUpdateRepository(UpdateRepositoryConfig{
-					RepoName:       repo,
-					RepositoryPath: repoInstallPath,
-					AliasBytes:     []byte(alias),
-					PreviousCommit: previousCommit,
-					LatestCommit:   latestCommit,
-					Repository:     repository,
-					SourceInfo:     sourceInfo,
-					StateFile:      mocks.stateFile,
-					Fs:             fs,
-				})
 
-				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(latestCommit, nil)
-				mocks.repoFactory.EXPECT().GetRepository([]byte(alias)).Return(repository)
-				mocks.executor.EXPECT().Execute(wf).Return(errWrong)
-			},
-			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.Equal(t, errWrong, err)
-			},
-		},
 		{
 			name: "success single repository no upgrade needed",
 			setup: func(mocks mocks) {
-				// iterator with only one key/value pair
-				mocks.stateFile.Sources[alias] = sourceInfo
-				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(previousCommit, nil)
+				mocks.stateFile.Sources[alias] = updated
+				mocks.git.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(previousCommit, nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.NoError(t, err)
@@ -120,26 +97,11 @@ func TestUpdateExecute(t *testing.T) {
 		{
 			name: "success single repository updates",
 			setup: func(mocks mocks) {
-				// iterator with only one key/value pair
-				mocks.stateFile.Sources[alias] = sourceInfo
-				wf := NewUpdateRepository(UpdateRepositoryConfig{
-					RepoName:       repo,
-					RepositoryPath: repoInstallPath,
-					AliasBytes:     []byte(alias),
-					PreviousCommit: previousCommit,
-					LatestCommit:   latestCommit,
-					Repository:     repository,
-					StateFile:      mocks.stateFile,
-					SourceInfo:     sourceInfo,
-					Fs:             fs,
-				})
-
-				mocks.gitFactory.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(latestCommit, nil)
-				mocks.repoFactory.EXPECT().GetRepository([]byte(alias)).Return(repository)
-				mocks.executor.EXPECT().Execute(wf).Return(nil)
+				mocks.stateFile.Sources[alias] = outdated
+				mocks.git.EXPECT().GetRepository(url, repoInstallPath, branch, &mocks.auth).Return(latestCommit, nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.NoError(t, err)
+				return assert.Equal(t, nil, err)
 			},
 		},
 	}
@@ -149,20 +111,19 @@ func TestUpdateExecute(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
 			executor := NewMockExecutor(ctrl)
-			db := mockdb.NewMockDatabase(ctrl)
 			installer := NewMockInstaller(ctrl)
-			gitFactory := git.NewMockFactory(ctrl)
-			repoFactory := storage.NewMockRepositoryFactory(ctrl)
+			git := git.NewMockFactory(ctrl)
+			repoFactory := state.NewMockRepositoryFactory(ctrl)
 
-			stateFile := storage.NewEmptyStateFile("stateFilePath")
+			stateFile, err := state.New("stateFilePath")
+			require.NoError(t, err)
 
 			test.setup(mocks{
 				ctrl:        ctrl,
 				executor:    executor,
 				stateFile:   stateFile,
-				db:          db,
 				installer:   installer,
-				gitFactory:  gitFactory,
+				git:         git,
 				auth:        auth,
 				repoFactory: repoFactory,
 			})
@@ -171,13 +132,12 @@ func TestUpdateExecute(t *testing.T) {
 				UpdateConfig{
 					Executor:         executor,
 					StateFile:        stateFile,
-					DB:               db,
 					TmpPath:          tmpPath,
 					PluginPath:       pluginPath,
 					Installer:        installer,
 					RepositoriesPath: repositoriesPath,
 					Auth:             auth,
-					GitFactory:       gitFactory,
+					Git:              git,
 					RepoFactory:      repoFactory,
 					Fs:               fs,
 				},

@@ -9,21 +9,20 @@ import (
 	"testing"
 
 	"github.com/ava-labs/avalanchego/utils/perms"
-	"github.com/ava-labs/avalanchego/version"
-	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/golang/mock/gomock"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ava-labs/apm/checksum"
-	"github.com/ava-labs/apm/storage"
+	"github.com/ava-labs/apm/state"
 	"github.com/ava-labs/apm/types"
 )
 
 func TestInstallExecute(t *testing.T) {
 	hash := []byte("foobar")
 
-	definition := storage.Definition[types.VM]{
+	definition := state.Definition[types.VM]{
 		Definition: types.VM{
 			ID:            "id",
 			Alias:         "alias",
@@ -34,17 +33,12 @@ func TestInstallExecute(t *testing.T) {
 			BinaryPath:    "./path/to/binary",
 			URL:           "www.website.com",
 			SHA256:        "666f6f626172",
-			Version: version.Semantic{
-				Major: 1,
-				Minor: 2,
-				Patch: 3,
-			},
 		},
-		Commit: plumbing.ZeroHash,
+		Commit: "commit",
 	}
 	vm := definition.Definition
 
-	noInstallScriptDefinition := storage.Definition[types.VM]{
+	noInstallScriptDefinition := state.Definition[types.VM]{
 		Definition: types.VM{
 			ID:            "id",
 			Alias:         "alias",
@@ -55,13 +49,8 @@ func TestInstallExecute(t *testing.T) {
 			BinaryPath:    "./path/to/binary",
 			URL:           "www.website.com",
 			SHA256:        "666f6f626172",
-			Version: version.Semantic{
-				Major: 5,
-				Minor: 6,
-				Patch: 7,
-			},
 		},
-		Commit: plumbing.ZeroHash,
+		Commit: "commit",
 	}
 	noInstallScriptVM := noInstallScriptDefinition.Definition
 
@@ -71,8 +60,8 @@ func TestInstallExecute(t *testing.T) {
 	errWrong := fmt.Errorf("something went wrong")
 
 	type mocks struct {
-		stateFile   storage.StateFile
-		vmStorage   *storage.MockStorage[storage.Definition[types.VM]]
+		stateFile   state.File
+		repository  *state.MockRepository
 		installer   *MockInstaller
 		checksummer *checksum.MockChecksummer
 		fs          afero.Fs
@@ -83,18 +72,9 @@ func TestInstallExecute(t *testing.T) {
 		wantErr assert.ErrorAssertionFunc
 	}{
 		{
-			name: "read vm registry fails",
-			setup: func(mocks mocks) {
-				mocks.vmStorage.EXPECT().Get([]byte("plugin")).Return(storage.Definition[types.VM]{}, errWrong)
-			},
-			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.Equal(t, err, errWrong)
-			},
-		},
-		{
 			name: "download fails",
 			setup: func(mocks mocks) {
-				mocks.vmStorage.EXPECT().Get([]byte("plugin")).Return(definition, nil)
+				mocks.repository.EXPECT().GetVM("plugin").Return(definition, nil)
 				mocks.installer.EXPECT().Download(vm.URL, tarPath).Return(errWrong)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
@@ -104,7 +84,7 @@ func TestInstallExecute(t *testing.T) {
 		{
 			name: "wrong checksum",
 			setup: func(mocks mocks) {
-				mocks.vmStorage.EXPECT().Get([]byte("plugin")).Return(definition, nil)
+				mocks.repository.EXPECT().GetVM("plugin").Return(definition, nil)
 				mocks.installer.EXPECT().Download(vm.URL, tarPath).Do(func(string, string) error {
 					return afero.WriteFile(mocks.fs, tarPath, nil, perms.ReadWrite)
 				})
@@ -117,7 +97,7 @@ func TestInstallExecute(t *testing.T) {
 		{
 			name: "decompress fails",
 			setup: func(mocks mocks) {
-				mocks.vmStorage.EXPECT().Get([]byte("plugin")).Return(definition, nil)
+				mocks.repository.EXPECT().GetVM("plugin").Return(definition, nil)
 				mocks.installer.EXPECT().Download(vm.URL, tarPath).Do(func(string, string) error {
 					return afero.WriteFile(mocks.fs, tarPath, nil, perms.ReadWrite)
 				})
@@ -131,7 +111,7 @@ func TestInstallExecute(t *testing.T) {
 		{
 			name: "install fails",
 			setup: func(mocks mocks) {
-				mocks.vmStorage.EXPECT().Get([]byte("plugin")).Return(definition, nil)
+				mocks.repository.EXPECT().GetVM("plugin").Return(definition, nil)
 				mocks.installer.EXPECT().Download(vm.URL, tarPath).Do(func(string, string) error {
 					return afero.WriteFile(mocks.fs, tarPath, nil, perms.ReadWrite)
 				})
@@ -149,7 +129,7 @@ func TestInstallExecute(t *testing.T) {
 		{
 			name: "happy case clean install",
 			setup: func(mocks mocks) {
-				mocks.vmStorage.EXPECT().Get([]byte("plugin")).Return(definition, nil)
+				mocks.repository.EXPECT().GetVM("plugin").Return(definition, nil)
 				mocks.installer.EXPECT().Download(vm.URL, tarPath).Do(func(string, string) error {
 					return afero.WriteFile(mocks.fs, tarPath, nil, perms.ReadWrite)
 				})
@@ -166,7 +146,7 @@ func TestInstallExecute(t *testing.T) {
 		{
 			name: "happy case no install script",
 			setup: func(mocks mocks) {
-				mocks.vmStorage.EXPECT().Get([]byte("plugin")).Return(noInstallScriptDefinition, nil)
+				mocks.repository.EXPECT().GetVM("plugin").Return(noInstallScriptDefinition, nil)
 				mocks.installer.EXPECT().Download(noInstallScriptVM.URL, tarPath).Do(func(string, string) error {
 					return afero.WriteFile(mocks.fs, tarPath, nil, perms.ReadWrite)
 				})
@@ -185,17 +165,17 @@ func TestInstallExecute(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 
-			var vmStorage *storage.MockStorage[storage.Definition[types.VM]]
+			stateFile, err := state.New("stateFilePath")
+			require.NoError(t, err)
 
-			stateFile := storage.NewEmptyStateFile("stateFilePath")
 			installer := NewMockInstaller(ctrl)
 			fs := afero.NewMemMapFs()
 			checksummer := checksum.NewMockChecksummer(ctrl)
-			vmStorage = storage.NewMockStorage[storage.Definition[types.VM]](ctrl)
+			repository := state.NewMockRepository(ctrl)
 
 			test.setup(mocks{
 				stateFile:   stateFile,
-				vmStorage:   vmStorage,
+				repository:  repository,
 				installer:   installer,
 				fs:          fs,
 				checksummer: checksummer,
@@ -210,7 +190,7 @@ func TestInstallExecute(t *testing.T) {
 					TmpPath:      "tmpPath",
 					PluginPath:   "pluginPath",
 					StateFile:    stateFile,
-					VMStorage:    vmStorage,
+					Repository:   repository,
 					Fs:           fs,
 					Installer:    installer,
 				},

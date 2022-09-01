@@ -8,12 +8,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/ava-labs/apm/storage"
+	"github.com/ava-labs/apm/state"
 )
 
 func TestAddRepositoryExecute(t *testing.T) {
 	type mocks struct {
-		sourcesList map[string]storage.SourceInfo
+		sourcesList map[string]*state.SourceInfo
 	}
 	tests := []struct {
 		name    string
@@ -21,9 +21,9 @@ func TestAddRepositoryExecute(t *testing.T) {
 		wantErr assert.ErrorAssertionFunc
 	}{
 		{
-			name: "duplicate alias",
+			name: "already exists",
 			setup: func(mocks mocks) {
-				mocks.sourcesList["alias"] = storage.SourceInfo{}
+				mocks.sourcesList["alias"] = nil
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Error(t, err)
@@ -41,7 +41,7 @@ func TestAddRepositoryExecute(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			sourcesList := make(map[string]storage.SourceInfo)
+			sourcesList := make(map[string]*state.SourceInfo)
 
 			test.setup(mocks{
 				sourcesList: sourcesList,

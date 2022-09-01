@@ -6,9 +6,8 @@ require (
 	github.com/ava-labs/avalanchego v1.7.14
 	github.com/cavaliergopher/grab/v3 v3.0.1
 	github.com/go-git/go-git/v5 v5.4.2
-	github.com/gofrs/flock v0.8.1
 	github.com/golang/mock v1.6.0
-	github.com/prometheus/client_golang v1.12.2
+	github.com/juju/fslock v0.0.0-20160525022230-4d5c94c67b4b
 	github.com/spf13/afero v1.8.2
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/viper v1.12.0
@@ -58,6 +57,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
+	github.com/prometheus/client_golang v1.12.2 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.34.0 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect

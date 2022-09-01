@@ -6,20 +6,20 @@ package engine
 import (
 	"fmt"
 
-	"github.com/ava-labs/apm/storage"
+	"github.com/ava-labs/apm/state"
 	"github.com/ava-labs/apm/workflow"
 )
 
 var _ workflow.Executor = &WorkflowEngine{}
 
-func NewWorkflowEngine(stateFile storage.StateFile) *WorkflowEngine {
+func NewWorkflowEngine(stateFile state.File) *WorkflowEngine {
 	return &WorkflowEngine{
 		stateFile: stateFile,
 	}
 }
 
 type WorkflowEngine struct {
-	stateFile storage.StateFile
+	stateFile state.File
 }
 
 func (w *WorkflowEngine) Execute(workflow workflow.Workflow) error {
