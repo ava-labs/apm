@@ -18,9 +18,6 @@ var (
 	vmDir     = "vms"
 	subnetDir = "subnets"
 
-	vmKey     = "vm"
-	subnetKey = "subnet"
-
 	extension = "yaml"
 )
 
@@ -37,18 +34,18 @@ type DiskRepository struct {
 }
 
 func (d DiskRepository) GetVM(name string) (Definition[types.VM], error) {
-	return get[types.VM](d, vmDir, name, vmKey)
+	return get[types.VM](d, vmDir, name)
 }
 
 func (d DiskRepository) GetSubnet(name string) (Definition[types.Subnet], error) {
-	return get[types.Subnet](d, subnetDir, name, subnetKey)
+	return get[types.Subnet](d, subnetDir, name)
 }
 
 func (d DiskRepository) GetPath() string {
 	return d.Path
 }
 
-func get[T types.Definition](d DiskRepository, dir string, file string, key string) (Definition[T], error) {
+func get[T types.Definition](d DiskRepository, dir string, file string) (Definition[T], error) {
 	relativePathWithExtension := filepath.Join(dir, fmt.Sprintf("%s.%s", file, extension))
 	absolutePathWithExtension := filepath.Join(d.Path, relativePathWithExtension)
 	bytes, err := os.ReadFile(absolutePathWithExtension)
@@ -56,12 +53,11 @@ func get[T types.Definition](d DiskRepository, dir string, file string, key stri
 		return Definition[T]{}, err
 	}
 
-	data := make(map[string]T)
-	if err := yaml.Unmarshal(bytes, data); err != nil {
+	var definition T
+	if err := yaml.Unmarshal(bytes, &definition); err != nil {
 		return Definition[T]{}, err
 	}
 
-	definition := data[key]
 	commit, err := d.Git.GetLastModified(d.Path, relativePathWithExtension)
 	if err != nil {
 		return Definition[T]{}, err

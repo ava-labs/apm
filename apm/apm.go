@@ -222,9 +222,10 @@ func (a *APM) joinSubnet(fullName string) error {
 	}
 
 	subnet := definition.Definition
+	subnetID, _ := subnet.GetID(constant.DefaultNetwork)
 
 	// TODO prompt user, add force flag
-	fmt.Printf("Installing virtual machines for subnet %s.\n", subnet.GetID())
+	fmt.Printf("Installing virtual machines for subnet %s.\n", subnetID)
 	for _, vm := range subnet.VMs {
 		if err := a.Install(strings.Join([]string{alias, vm}, constant.QualifiedNameDelimiter)); err != nil {
 			return err
@@ -238,8 +239,8 @@ func (a *APM) joinSubnet(fullName string) error {
 		return err
 	}
 
-	fmt.Printf("Whitelisting subnet %s...\n", subnet.GetID())
-	if err := a.adminClient.WhitelistSubnet(subnet.GetID()); errors.Is(err, syscall.ECONNREFUSED) {
+	fmt.Printf("Whitelisting subnet %s...\n", subnetID)
+	if err := a.adminClient.WhitelistSubnet(subnetID); errors.Is(err, syscall.ECONNREFUSED) {
 		fmt.Printf("Node at %s was offline. You'll need to whitelist the subnet upon node restart.\n", a.adminAPIEndpoint)
 	} else if err != nil {
 		return err
