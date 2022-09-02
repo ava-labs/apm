@@ -10,4 +10,5 @@ const (
 	CoreBranch             = "master"
 	QualifiedNameDelimiter = ":"
 	AliasDelimiter         = "/"
+	DefaultNetwork         = "testnet"
 )

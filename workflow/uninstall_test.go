@@ -17,19 +17,21 @@ import (
 func TestUninstallExecute(t *testing.T) {
 	name := "organization/repository:vm"
 
+	vm := types.VM{
+		ID:            "id",
+		Alias:         "vm",
+		Homepage:      "homepage",
+		Description:   "description",
+		Maintainers:   []string{"joshua", "kim"},
+		InstallScript: "./installScript",
+		BinaryPath:    "./build/binaryPath",
+		URL:           "url",
+		SHA256:        "sha256",
+	}
+
 	definition := state.Definition[types.VM]{
-		Definition: types.VM{
-			ID:            "id",
-			Alias:         "vm",
-			Homepage:      "homepage",
-			Description:   "description",
-			Maintainers:   []string{"joshua", "kim"},
-			InstallScript: "./installScript",
-			BinaryPath:    "./build/binaryPath",
-			URL:           "url",
-			SHA256:        "sha256",
-		},
-		Commit: "commit",
+		Definition: vm,
+		Commit:     "commit",
 	}
 
 	type mocks struct {
@@ -52,7 +54,7 @@ func TestUninstallExecute(t *testing.T) {
 			name: "success",
 			setup: func(mocks mocks) {
 				mocks.stateFile.InstallationRegistry[name] = &state.InstallInfo{
-					ID:     definition.Definition.GetID(),
+					ID:     vm.GetID(),
 					Commit: definition.Commit,
 				}
 			},
