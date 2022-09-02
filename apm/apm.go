@@ -12,31 +12,26 @@ import (
 	"syscall"
 	"text/tabwriter"
 
-	"github.com/ava-labs/avalanchego/database"
-	"github.com/ava-labs/avalanchego/database/leveldb"
-	"github.com/ava-labs/avalanchego/utils/logging"
 	"github.com/ava-labs/avalanchego/utils/perms"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
-	"github.com/prometheus/client_golang/prometheus"
+	"github.com/juju/fslock"
 	"github.com/spf13/afero"
 
 	"github.com/ava-labs/apm/admin"
 	"github.com/ava-labs/apm/constant"
 	"github.com/ava-labs/apm/engine"
 	"github.com/ava-labs/apm/git"
-	"github.com/ava-labs/apm/storage"
-	"github.com/ava-labs/apm/types"
+	"github.com/ava-labs/apm/state"
 	"github.com/ava-labs/apm/url"
 	"github.com/ava-labs/apm/util"
 	"github.com/ava-labs/apm/workflow"
 )
 
-var (
-	dbDir            = "db"
-	repositoryDir    = "repositories"
-	tmpDir           = "tmp"
-	metricsNamespace = "apm_db"
+const (
+	repositoryDir = "repositories"
+	tmpDir        = "tmp"
+	lockFile      = "apm.lock"
 )
 
 type Config struct {
@@ -45,15 +40,12 @@ type Config struct {
 	AdminAPIEndpoint string
 	PluginDir        string
 	Fs               afero.Fs
+	StateFile        state.File
 }
 
 type APM struct {
-	db database.Database
-
-	sourcesList  storage.Storage[storage.SourceInfo]
-	installedVMs storage.Storage[storage.InstallInfo]
-	registry     storage.Storage[storage.RepoList]
-	repoFactory  storage.RepositoryFactory
+	repoFactory state.RepositoryFactory
+	git         git.Factory
 
 	executor workflow.Executor
 
@@ -67,57 +59,56 @@ type APM struct {
 	pluginPath       string
 	adminAPIEndpoint string
 	fs               afero.Fs
+	stateFile        state.File
+	lock             *fslock.Lock
 }
 
 func New(config Config) (*APM, error) {
-	dbDir := filepath.Join(config.Directory, dbDir)
-	db, err := leveldb.New(dbDir, []byte{}, logging.NoLog{}, metricsNamespace, prometheus.NewRegistry())
+	if err := os.MkdirAll(config.Directory, perms.ReadWriteExecute); err != nil {
+		return nil, err
+	}
+	stateFile, err := state.New(config.Directory)
 	if err != nil {
 		return nil, err
 	}
 
+	repositoriesPath := filepath.Join(config.Directory, repositoryDir)
 	a := &APM{
-		repositoriesPath: filepath.Join(config.Directory, repositoryDir),
-		tmpPath:          filepath.Join(config.Directory, tmpDir),
-		pluginPath:       config.PluginDir,
-		db:               db,
-		registry:         storage.NewRegistry(db),
-		sourcesList:      storage.NewSourceInfo(db),
-		installedVMs:     storage.NewInstalledVMs(db),
-		auth:             config.Auth,
-		adminAPIEndpoint: config.AdminAPIEndpoint,
-		adminClient:      admin.NewClient(fmt.Sprintf("http://%s", config.AdminAPIEndpoint)),
+		repoFactory: state.NewRepositoryFactory(repositoriesPath),
+		git:         git.RepositoryFactory{},
+		executor:    engine.NewWorkflowEngine(stateFile),
+		auth:        config.Auth,
+		adminClient: admin.NewClient(fmt.Sprintf("http://%s", config.AdminAPIEndpoint)),
 		installer: workflow.NewVMInstaller(
 			workflow.VMInstallerConfig{
 				Fs:        config.Fs,
 				URLClient: url.NewClient(),
 			},
 		),
-		executor:    engine.NewWorkflowEngine(),
-		fs:          config.Fs,
-		repoFactory: storage.NewRepositoryFactory(db),
+		repositoriesPath: repositoriesPath,
+		tmpPath:          filepath.Join(config.Directory, tmpDir),
+		pluginPath:       config.PluginDir,
+		adminAPIEndpoint: config.AdminAPIEndpoint,
+		fs:               config.Fs,
+		stateFile:        stateFile,
+		lock:             fslock.New(filepath.Join(config.Directory, lockFile)),
 	}
 	if err := os.MkdirAll(a.repositoriesPath, perms.ReadWriteExecute); err != nil {
 		return nil, err
 	}
 
-	// TODO simplify this
-	coreKey := []byte(constant.CoreAlias)
-	if ok, err := a.sourcesList.Has(coreKey); err != nil {
-		return nil, err
-	} else if !ok {
+	// Sync the core repository if it hasn't been bootstrapped yet.
+	if _, ok := a.stateFile.Sources[constant.CoreAlias]; !ok {
 		err := a.AddRepository(constant.CoreAlias, constant.CoreURL, constant.CoreBranch)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	repoMetadata, err := a.sourcesList.Get(coreKey)
-	if err != nil {
-		return nil, err
-	}
+	// Guaranteed to have this now since we've bootstrapped
+	repoMetadata := a.stateFile.Sources[constant.CoreAlias]
 
-	if repoMetadata.Commit == plumbing.ZeroHash {
+	if repoMetadata.Commit == plumbing.ZeroHash.String() {
 		fmt.Println("Bootstrap not detected. Bootstrapping...")
 		err := a.Update()
 		if err != nil {
@@ -129,12 +120,15 @@ func New(config Config) (*APM, error) {
 	return a, nil
 }
 
-func parseAndRun(alias string, registry storage.Storage[storage.RepoList], command func(string) error) error {
+func (a *APM) parseAndRun(
+	alias string,
+	command func(string) error,
+) error {
 	if qualifiedName(alias) {
 		return command(alias)
 	}
 
-	fullName, err := getFullNameForAlias(registry, alias)
+	fullName, err := a.getFullNameForAlias(alias)
 	if err != nil {
 		return err
 	}
@@ -143,17 +137,18 @@ func parseAndRun(alias string, registry storage.Storage[storage.RepoList], comma
 }
 
 func (a *APM) Install(alias string) error {
-	return parseAndRun(alias, a.registry, a.install)
+	return a.parseAndRun(alias, a.install)
 }
 
 func (a *APM) install(name string) error {
-	nameBytes := []byte(name)
-
-	ok, err := a.installedVMs.Has(nameBytes)
-	if err != nil {
+	if err := a.lock.TryLock(); err != nil {
 		return err
 	}
+	defer func() {
+		_ = a.lock.Unlock()
+	}()
 
+	_, ok := a.stateFile.InstallationRegistry[name]
 	if ok {
 		fmt.Printf("VM %s is already installed. Skipping.\n", name)
 		return nil
@@ -162,7 +157,10 @@ func (a *APM) install(name string) error {
 	repoAlias, plugin := util.ParseQualifiedName(name)
 	organization, repo := util.ParseAlias(repoAlias)
 
-	repository := a.repoFactory.GetRepository([]byte(repoAlias))
+	repository, err := a.repoFactory.GetRepository(repoAlias)
+	if err != nil {
+		return err
+	}
 
 	workflow := workflow.NewInstall(workflow.InstallConfig{
 		Name:         name,
@@ -171,8 +169,8 @@ func (a *APM) install(name string) error {
 		Repo:         repo,
 		TmpPath:      a.tmpPath,
 		PluginPath:   a.pluginPath,
-		InstalledVMs: a.installedVMs,
-		VMStorage:    repository.VMs,
+		StateFile:    a.stateFile,
+		Repository:   repository,
 		Fs:           a.fs,
 		Installer:    a.installer,
 	})
@@ -181,43 +179,44 @@ func (a *APM) install(name string) error {
 }
 
 func (a *APM) Uninstall(alias string) error {
-	return parseAndRun(alias, a.registry, a.uninstall)
+	return a.parseAndRun(alias, a.uninstall)
 }
 
 func (a *APM) uninstall(name string) error {
+	if err := a.lock.TryLock(); err != nil {
+		return err
+	}
+	defer func() {
+		_ = a.lock.Unlock()
+	}()
+
 	alias, plugin := util.ParseQualifiedName(name)
-
-	repository := a.repoFactory.GetRepository([]byte(alias))
-
 	wf := workflow.NewUninstall(
 		workflow.UninstallConfig{
-			Name:         name,
-			Plugin:       plugin,
-			RepoAlias:    alias,
-			VMStorage:    repository.VMs,
-			InstalledVMs: a.installedVMs,
-			Fs:           a.fs,
-			PluginPath:   a.pluginPath,
+			Name:       name,
+			Plugin:     plugin,
+			RepoAlias:  alias,
+			StateFile:  a.stateFile,
+			Fs:         a.fs,
+			PluginPath: a.pluginPath,
 		},
 	)
 
-	return wf.Execute()
+	return a.executor.Execute(wf)
 }
 
 func (a *APM) JoinSubnet(alias string) error {
-	return parseAndRun(alias, a.registry, a.joinSubnet)
+	return a.parseAndRun(alias, a.joinSubnet)
 }
 
 func (a *APM) joinSubnet(fullName string) error {
 	alias, plugin := util.ParseQualifiedName(fullName)
-	repoRegistry := a.repoFactory.GetRepository([]byte(alias))
+	repo, err := a.repoFactory.GetRepository(alias)
+	if err != nil {
+		return err
+	}
 
-	var (
-		definition storage.Definition[types.Subnet]
-		err        error
-	)
-
-	definition, err = repoRegistry.Subnets.Get([]byte(plugin))
+	definition, err := repo.GetSubnet(plugin)
 	if err != nil {
 		return err
 	}
@@ -255,7 +254,7 @@ func (a *APM) Info(alias string) error {
 		return a.install(alias)
 	}
 
-	fullName, err := getFullNameForAlias(a.registry, alias)
+	fullName, err := a.getFullNameForAlias(alias)
 	if err != nil {
 		return err
 	}
@@ -263,25 +262,29 @@ func (a *APM) Info(alias string) error {
 	return a.info(fullName)
 }
 
-func (a *APM) info(fullName string) error {
+func (a *APM) info(_ string) error {
 	return nil
 }
 
 func (a *APM) Update() error {
+	if err := a.lock.TryLock(); err != nil {
+		return err
+	}
+	defer func() {
+		_ = a.lock.Unlock()
+	}()
+
 	workflow := workflow.NewUpdate(workflow.UpdateConfig{
 		Executor:         a.executor,
-		Registry:         a.registry,
-		InstalledVMs:     a.installedVMs,
-		SourcesList:      a.sourcesList,
-		DB:               a.db,
+		StateFile:        a.stateFile,
 		TmpPath:          a.tmpPath,
 		PluginPath:       a.pluginPath,
 		Installer:        a.installer,
 		RepositoriesPath: a.repositoriesPath,
 		Auth:             a.auth,
-		GitFactory:       git.RepositoryFactory{},
-		RepoFactory:      storage.NewRepositoryFactory(a.db),
+		RepoFactory:      a.repoFactory,
 		Fs:               a.fs,
+		Git:              a.git,
 	})
 
 	if err := a.executor.Execute(workflow); err != nil {
@@ -292,22 +295,28 @@ func (a *APM) Update() error {
 }
 
 func (a *APM) Upgrade(alias string) error {
+	if err := a.lock.TryLock(); err != nil {
+		return err
+	}
+	defer func() {
+		_ = a.lock.Unlock()
+	}()
+
 	// If we have an alias specified, upgrade the specified VM.
 	if alias != "" {
-		return parseAndRun(alias, a.registry, a.upgradeVM)
+		return a.parseAndRun(alias, a.upgradeVM)
 	}
 
 	// Otherwise, just upgrade everything.
 	wf := workflow.NewUpgrade(workflow.UpgradeConfig{
-		Executor:     a.executor,
-		RepoFactory:  a.repoFactory,
-		Registry:     a.registry,
-		SourcesList:  a.sourcesList,
-		InstalledVMs: a.installedVMs,
-		TmpPath:      a.tmpPath,
-		PluginPath:   a.pluginPath,
-		Installer:    a.installer,
-		Fs:           a.fs,
+		Executor:    a.executor,
+		RepoFactory: a.repoFactory,
+		StateFile:   a.stateFile,
+		TmpPath:     a.tmpPath,
+		PluginPath:  a.pluginPath,
+		Installer:   a.installer,
+		Fs:          a.fs,
+		Git:         a.git,
 	})
 
 	return a.executor.Execute(wf)
@@ -316,26 +325,34 @@ func (a *APM) Upgrade(alias string) error {
 func (a *APM) upgradeVM(name string) error {
 	return a.executor.Execute(workflow.NewUpgradeVM(
 		workflow.UpgradeVMConfig{
-			Executor:     a.executor,
-			FullVMName:   name,
-			RepoFactory:  a.repoFactory,
-			InstalledVMs: a.installedVMs,
-			TmpPath:      a.tmpPath,
-			PluginPath:   a.pluginPath,
-			Installer:    a.installer,
-			Fs:           a.fs,
+			Executor:    a.executor,
+			FullVMName:  name,
+			RepoFactory: a.repoFactory,
+			StateFile:   a.stateFile,
+			TmpPath:     a.tmpPath,
+			PluginPath:  a.pluginPath,
+			Installer:   a.installer,
+			Fs:          a.fs,
+			Git:         a.git,
 		},
 	))
 }
 
 func (a *APM) AddRepository(alias string, url string, branch string) error {
+	if err := a.lock.TryLock(); err != nil {
+		return err
+	}
+	defer func() {
+		_ = a.lock.Unlock()
+	}()
+
 	if !util.ValidAlias(alias) {
 		return fmt.Errorf("%s is not a valid alias (must be in the form of organization/repository)", alias)
 	}
 
 	wf := workflow.NewAddRepository(
 		workflow.AddRepositoryConfig{
-			SourcesList: a.sourcesList,
+			SourcesList: a.stateFile.Sources,
 			Alias:       alias,
 			URL:         url,
 			Branch:      plumbing.NewBranchReferenceName(branch),
@@ -346,49 +363,34 @@ func (a *APM) AddRepository(alias string, url string, branch string) error {
 }
 
 func (a *APM) RemoveRepository(alias string) error {
-	if alias == constant.CoreAlias {
-		fmt.Printf("Can't remove %s (required repository).\n", constant.CoreAlias)
-		return nil
+	if err := a.lock.TryLock(); err != nil {
+		return err
 	}
+	defer func() {
+		_ = a.lock.Unlock()
+	}()
 
-	aliasBytes := []byte(alias)
-	repoRegistry := a.repoFactory.GetRepository(aliasBytes)
-
-	// delete all the plugin definitions in the repository
-	vmItr := repoRegistry.VMs.Iterator()
-	defer vmItr.Release()
-
-	for vmItr.Next() {
-		if err := repoRegistry.VMs.Delete(vmItr.Key()); err != nil {
-			return err
-		}
-	}
-
-	subnetItr := repoRegistry.Subnets.Iterator()
-	defer subnetItr.Release()
-
-	for subnetItr.Next() {
-		if err := repoRegistry.Subnets.Delete(subnetItr.Key()); err != nil {
-			return err
-		}
-	}
-
-	// remove it from our list of tracked repositories
-	return a.sourcesList.Delete(aliasBytes)
+	return a.executor.Execute(workflow.NewRemoveRepository(
+		workflow.RemoveRepositoryConfig{
+			SourcesList:      a.stateFile.Sources,
+			RepositoriesPath: a.repositoriesPath,
+			Alias:            alias,
+		},
+	))
 }
 
 func (a *APM) ListRepositories() error {
-	itr := a.sourcesList.Iterator()
+	if err := a.lock.TryLock(); err != nil {
+		return err
+	}
+	defer func() {
+		_ = a.lock.Unlock()
+	}()
 
 	w := tabwriter.NewWriter(os.Stdout, 1, 1, 1, ' ', 0)
 	fmt.Fprintln(w, "alias\turl\tbranch")
-	for itr.Next() {
-		metadata, err := itr.Value()
-		if err != nil {
-			return err
-		}
-
-		fmt.Fprintf(w, "%s\t%s\t%s\n", metadata.Alias, metadata.URL, metadata.Branch)
+	for alias, metadata := range a.stateFile.Sources {
+		fmt.Fprintf(w, "%s\t%s\t%s\n", alias, metadata.URL, metadata.Branch)
 	}
 	w.Flush()
 	return nil
@@ -399,15 +401,21 @@ func qualifiedName(name string) bool {
 	return len(parsed) > 1
 }
 
-func getFullNameForAlias(registry storage.Storage[storage.RepoList], alias string) (string, error) {
-	repoList, err := registry.Get([]byte(alias))
-	if err != nil {
-		return "", err
+func (a *APM) getFullNameForAlias(alias string) (string, error) {
+	matches := make([]string, 0)
+
+	for alias := range a.stateFile.Sources {
+		// See if this repo exists
+		_, err := a.repoFactory.GetRepository(alias)
+		if err != nil {
+			return "", err
+		}
+
+		matches = append(matches, alias)
+	}
+	if len(matches) > 1 {
+		return "", fmt.Errorf("more than one match found for %s. Please specify the fully qualified name. Matches: %s", alias, matches)
 	}
 
-	if len(repoList.Repositories) > 1 {
-		return "", fmt.Errorf("more than one match found for %s. Please specify the fully qualified name. Matches: %s", alias, repoList.Repositories)
-	}
-
-	return fmt.Sprintf("%s:%s", repoList.Repositories[0], alias), nil
+	return fmt.Sprintf("%s:%s", matches[0], alias), nil
 }

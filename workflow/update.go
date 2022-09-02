@@ -7,12 +7,11 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/ava-labs/avalanchego/database"
 	"github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/spf13/afero"
 
 	"github.com/ava-labs/apm/git"
-	"github.com/ava-labs/apm/storage"
+	"github.com/ava-labs/apm/state"
 	"github.com/ava-labs/apm/util"
 )
 
@@ -20,95 +19,70 @@ var _ Workflow = &Update{}
 
 type UpdateConfig struct {
 	Executor         Executor
-	Registry         storage.Storage[storage.RepoList]
-	InstalledVMs     storage.Storage[storage.InstallInfo]
-	SourcesList      storage.Storage[storage.SourceInfo]
-	DB               database.Database
 	TmpPath          string
 	PluginPath       string
 	Installer        Installer
 	RepositoriesPath string
 	Auth             http.BasicAuth
-	GitFactory       git.Factory
-	RepoFactory      storage.RepositoryFactory
+	RepoFactory      state.RepositoryFactory
 	Fs               afero.Fs
+	StateFile        state.File
+	Git              git.Factory
 }
 
 func NewUpdate(config UpdateConfig) *Update {
 	return &Update{
 		executor:         config.Executor,
-		registry:         config.Registry,
-		installedVMs:     config.InstalledVMs,
-		db:               config.DB,
 		tmpPath:          config.TmpPath,
 		pluginPath:       config.PluginPath,
 		installer:        config.Installer,
-		sourcesList:      config.SourcesList,
 		repositoriesPath: config.RepositoriesPath,
 		auth:             config.Auth,
-		gitFactory:       config.GitFactory,
 		repoFactory:      config.RepoFactory,
 		fs:               config.Fs,
+		stateFile:        config.StateFile,
+		git:              config.Git,
 	}
 }
 
 type Update struct {
 	executor         Executor
-	db               database.Database
-	registry         storage.Storage[storage.RepoList]
-	installedVMs     storage.Storage[storage.InstallInfo]
-	sourcesList      storage.Storage[storage.SourceInfo]
 	installer        Installer
 	auth             http.BasicAuth
 	tmpPath          string
 	pluginPath       string
 	repositoriesPath string
-	gitFactory       git.Factory
-	repoFactory      storage.RepositoryFactory
+	repoFactory      state.RepositoryFactory
 	fs               afero.Fs
+	git              git.Factory
+	stateFile        state.File
 }
 
 func (u Update) Execute() error {
-	itr := u.sourcesList.Iterator()
-	defer itr.Release()
+	updated := 0
 
-	for itr.Next() {
-		aliasBytes := itr.Key()
-		alias := string(aliasBytes)
+	fmt.Printf("Checking for updates...\n")
+
+	for alias, sourceInfo := range u.stateFile.Sources {
 		organization, repo := util.ParseAlias(alias)
 
-		sourceInfo, err := itr.Value()
-		if err != nil {
-			return err
-		}
 		previousCommit := sourceInfo.Commit
 		repositoryPath := filepath.Join(u.repositoriesPath, organization, repo)
-		latestCommit, err := u.gitFactory.GetRepository(sourceInfo.URL, repositoryPath, sourceInfo.Branch, &u.auth)
+		latestCommit, err := u.git.GetRepository(sourceInfo.URL, repositoryPath, sourceInfo.Branch, &u.auth)
 		if err != nil {
 			return err
 		}
 
-		if latestCommit == previousCommit {
-			fmt.Printf("Already at latest for %s@%s.\n", alias, latestCommit)
-			continue
+		if latestCommit != previousCommit {
+			fmt.Printf("Updated definitions for %s@%s.\n", alias, latestCommit)
+			updated++
 		}
 
-		workflow := NewUpdateRepository(UpdateRepositoryConfig{
-			RepoName:       repo,
-			RepositoryPath: repositoryPath,
-			AliasBytes:     aliasBytes,
-			PreviousCommit: previousCommit,
-			LatestCommit:   latestCommit,
-			Repository:     u.repoFactory.GetRepository(aliasBytes),
-			Registry:       u.registry,
-			SourceInfo:     sourceInfo,
-			SourcesList:    u.sourcesList,
-			Fs:             u.fs,
-		})
+		u.stateFile.Sources[alias].Commit = latestCommit
+	}
 
-		if err := u.executor.Execute(workflow); err != nil {
-			return err
-		}
+	if updated == 0 {
+		fmt.Printf("All repositories are already up-to-date.\n")
 	}
 
 	return nil

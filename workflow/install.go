@@ -14,8 +14,7 @@ import (
 	"github.com/spf13/afero"
 
 	"github.com/ava-labs/apm/checksum"
-	"github.com/ava-labs/apm/storage"
-	"github.com/ava-labs/apm/types"
+	"github.com/ava-labs/apm/state"
 )
 
 var _ Workflow = &Install{}
@@ -28,10 +27,10 @@ type InstallConfig struct {
 	TmpPath      string
 	PluginPath   string
 
-	InstalledVMs storage.Storage[storage.InstallInfo]
-	VMStorage    storage.Storage[storage.Definition[types.VM]]
-	Fs           afero.Fs
-	Installer    Installer
+	StateFile  state.File
+	Repository state.Repository
+	Fs         afero.Fs
+	Installer  Installer
 }
 
 func NewInstall(config InstallConfig) *Install {
@@ -42,8 +41,8 @@ func NewInstall(config InstallConfig) *Install {
 		repo:         config.Repo,
 		tmpPath:      config.TmpPath,
 		pluginPath:   config.PluginPath,
-		installedVMs: config.InstalledVMs,
-		vmStorage:    config.VMStorage,
+		stateFile:    config.StateFile,
+		repository:   config.Repository,
 		fs:           config.Fs,
 		installer:    config.Installer,
 		checksummer:  checksum.NewSHA256(config.Fs),
@@ -58,20 +57,15 @@ type Install struct {
 	tmpPath      string
 	pluginPath   string
 
-	installedVMs storage.Storage[storage.InstallInfo]
-	vmStorage    storage.Storage[storage.Definition[types.VM]]
-	fs           afero.Fs
-	installer    Installer
-	checksummer  checksum.Checksummer
+	stateFile   state.File
+	repository  state.Repository
+	fs          afero.Fs
+	installer   Installer
+	checksummer checksum.Checksummer
 }
 
 func (i Install) Execute() error {
-	var (
-		definition storage.Definition[types.VM]
-		err        error
-	)
-
-	definition, err = i.vmStorage.Get([]byte(i.plugin))
+	definition, err := i.repository.GetVM(i.plugin)
 	if err != nil {
 		return err
 	}
@@ -136,14 +130,11 @@ func (i Install) Execute() error {
 	}
 
 	fmt.Printf("Adding virtual machine %s to installation registry...\n", vm.ID)
-	installInfo := storage.InstallInfo{
-		ID:      vm.ID,
-		Version: vm.Version,
-	}
-	if err := i.installedVMs.Put([]byte(i.name), installInfo); err != nil {
-		return err
+	i.stateFile.InstallationRegistry[i.name] = &state.InstallInfo{
+		ID:     vm.ID,
+		Commit: definition.Commit,
 	}
 
-	fmt.Printf("Successfully installed %s@v%v.%v.%v in %s\n", i.name, vm.Version.Major, vm.Version.Minor, vm.Version.Patch, filepath.Join(i.pluginPath, vm.ID))
+	fmt.Printf("Successfully installed %s@%s in %s\n", i.name, definition.Commit, filepath.Join(i.pluginPath, vm.ID))
 	return nil
 }

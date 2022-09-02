@@ -3,16 +3,31 @@
 
 package engine
 
-import "github.com/ava-labs/apm/workflow"
+import (
+	"fmt"
+
+	"github.com/ava-labs/apm/state"
+	"github.com/ava-labs/apm/workflow"
+)
 
 var _ workflow.Executor = &WorkflowEngine{}
 
-func NewWorkflowEngine() *WorkflowEngine {
-	return &WorkflowEngine{}
+func NewWorkflowEngine(stateFile state.File) *WorkflowEngine {
+	return &WorkflowEngine{
+		stateFile: stateFile,
+	}
 }
 
-type WorkflowEngine struct{}
+type WorkflowEngine struct {
+	stateFile state.File
+}
 
-func (w WorkflowEngine) Execute(workflow workflow.Workflow) error {
+func (w *WorkflowEngine) Execute(workflow workflow.Workflow) error {
+	defer func() {
+		if err := w.stateFile.Commit(); err != nil {
+			fmt.Printf("failed to commit the statefile")
+		}
+	}()
+
 	return workflow.Execute()
 }

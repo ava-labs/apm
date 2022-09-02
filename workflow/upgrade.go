@@ -8,77 +8,73 @@ import (
 
 	"github.com/spf13/afero"
 
-	"github.com/ava-labs/apm/storage"
+	"github.com/ava-labs/apm/git"
+	"github.com/ava-labs/apm/state"
 )
 
 type UpgradeConfig struct {
 	Executor Executor
 
-	RepoFactory  storage.RepositoryFactory
-	Registry     storage.Storage[storage.RepoList]
-	SourcesList  storage.Storage[storage.SourceInfo]
-	InstalledVMs storage.Storage[storage.InstallInfo]
+	RepoFactory state.RepositoryFactory
+	StateFile   state.File
 
 	TmpPath    string
 	PluginPath string
 	Installer  Installer
+	Git        git.Factory
 	Fs         afero.Fs
 }
 
 func NewUpgrade(config UpgradeConfig) *Upgrade {
 	return &Upgrade{
-		executor:     config.Executor,
-		repoFactory:  config.RepoFactory,
-		registry:     config.Registry,
-		installedVMs: config.InstalledVMs,
-		tmpPath:      config.TmpPath,
-		pluginPath:   config.PluginPath,
-		installer:    config.Installer,
-		sourcesList:  config.SourcesList,
-		fs:           config.Fs,
+		executor:    config.Executor,
+		repoFactory: config.RepoFactory,
+		tmpPath:     config.TmpPath,
+		pluginPath:  config.PluginPath,
+		installer:   config.Installer,
+		stateFile:   config.StateFile,
+		git:         config.Git,
+		fs:          config.Fs,
 	}
 }
 
 type Upgrade struct {
 	executor Executor
 
-	repoFactory storage.RepositoryFactory
-	registry    storage.Storage[storage.RepoList]
-
-	installedVMs storage.Storage[storage.InstallInfo]
-	sourcesList  storage.Storage[storage.SourceInfo]
+	repoFactory state.RepositoryFactory
+	stateFile   state.File
 
 	tmpPath    string
 	pluginPath string
 
 	installer Installer
+	git       git.Factory
 	fs        afero.Fs
 }
 
 func (u *Upgrade) Execute() error {
 	upgraded := false
 
-	itr := u.installedVMs.Iterator()
-	defer itr.Release()
-
-	for itr.Next() {
+	for name := range u.stateFile.InstallationRegistry {
 		wf := NewUpgradeVM(UpgradeVMConfig{
-			Executor:     u.executor,
-			RepoFactory:  u.repoFactory,
-			FullVMName:   string(itr.Key()),
-			InstalledVMs: u.installedVMs,
-			TmpPath:      u.tmpPath,
-			PluginPath:   u.pluginPath,
-			Installer:    u.installer,
-			Fs:           u.fs,
+			Executor:    u.executor,
+			FullVMName:  name,
+			RepoFactory: u.repoFactory,
+			StateFile:   u.stateFile,
+			TmpPath:     u.tmpPath,
+			PluginPath:  u.pluginPath,
+			Installer:   u.installer,
+			Git:         u.git,
+			Fs:          u.fs,
 		})
 
-		err := u.executor.Execute(wf)
-		if err == nil || err == ErrAlreadyUpdated {
-			upgraded = true
+		if err := u.executor.Execute(wf); err == ErrAlreadyUpdated {
+			continue
 		} else if err != nil {
 			return err
 		}
+
+		upgraded = true
 	}
 
 	if !upgraded {

@@ -4,21 +4,16 @@
 package workflow
 
 import (
-	"fmt"
 	"testing"
 
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/ava-labs/apm/storage"
+	"github.com/ava-labs/apm/state"
 )
 
 func TestAddRepositoryExecute(t *testing.T) {
-	errWrong := fmt.Errorf("something went wrong")
-
 	type mocks struct {
-		sourcesList *storage.MockStorage[storage.SourceInfo]
+		sourcesList map[string]*state.SourceInfo
 	}
 	tests := []struct {
 		name    string
@@ -26,58 +21,17 @@ func TestAddRepositoryExecute(t *testing.T) {
 		wantErr assert.ErrorAssertionFunc
 	}{
 		{
-			name: "can't read from sources list",
+			name: "already exists",
 			setup: func(mocks mocks) {
-				mocks.sourcesList.EXPECT().Has([]byte("alias")).Return(false, errWrong)
-			},
-			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.Equal(t, errWrong, err)
-			},
-		},
-		{
-			name: "duplicate alias",
-			setup: func(mocks mocks) {
-				mocks.sourcesList.EXPECT().Has([]byte("alias")).Return(true, nil)
+				mocks.sourcesList["alias"] = nil
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Error(t, err)
 			},
 		},
 		{
-			name: "adding to sources list fails",
-			setup: func(mocks mocks) {
-				mocks.sourcesList.EXPECT().Has([]byte("alias")).Return(false, nil)
-				mocks.sourcesList.EXPECT().
-					Put(
-						[]byte("alias"),
-						storage.SourceInfo{
-							Alias:  "alias",
-							URL:    "url",
-							Branch: "master",
-							Commit: plumbing.ZeroHash,
-						},
-					).
-					Return(errWrong)
-			},
-			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
-				return assert.Equal(t, errWrong, err)
-			},
-		},
-		{
 			name: "success",
 			setup: func(mocks mocks) {
-				mocks.sourcesList.EXPECT().Has([]byte("alias")).Return(false, nil)
-				mocks.sourcesList.EXPECT().
-					Put(
-						[]byte("alias"),
-						storage.SourceInfo{
-							Alias:  "alias",
-							URL:    "url",
-							Branch: "master",
-							Commit: plumbing.ZeroHash,
-						},
-					).
-					Return(nil)
 			},
 			wantErr: func(t assert.TestingT, err error, i ...interface{}) bool {
 				return assert.Nil(t, err)
@@ -87,12 +41,7 @@ func TestAddRepositoryExecute(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-
-			// nolint
-			var sourcesList *storage.MockStorage[storage.SourceInfo]
-
-			sourcesList = storage.NewMockStorage[storage.SourceInfo](ctrl)
+			sourcesList := make(map[string]*state.SourceInfo)
 
 			test.setup(mocks{
 				sourcesList: sourcesList,
