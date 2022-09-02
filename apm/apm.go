@@ -370,15 +370,13 @@ func (a *APM) RemoveRepository(alias string) error {
 		_ = a.lock.Unlock()
 	}()
 
-	a.executor.Execute(workflow.NewRemoveRepository(
+	return a.executor.Execute(workflow.NewRemoveRepository(
 		workflow.RemoveRepositoryConfig{
 			SourcesList:      a.stateFile.Sources,
 			RepositoriesPath: a.repositoriesPath,
 			Alias:            alias,
 		},
 	))
-
-	return nil
 }
 
 func (a *APM) ListRepositories() error {
